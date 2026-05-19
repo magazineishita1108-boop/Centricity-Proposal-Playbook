@@ -1,0 +1,4 @@
+# Block all crawlers from indexing this site.
+# The dashboard URL is meant to be shared only inside the Centricity Products team.
+User-agent: *
+Disallow: /
