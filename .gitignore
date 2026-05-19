@@ -1,0 +1,38 @@
+# --- Base-data sources (sensitive — never commit) ---
+# Reckoner, MF Monitor, Analytics workbooks live only on the admin's machine
+*.xlsx
+*.xlsm
+*.xls
+*.xlsb
+uploads/
+inputs/
+
+# --- Dashboard backups / broken states from local builds ---
+*.bak
+*.bak2
+*.bak3
+*.bak4
+*.bak5
+*.broken
+*.broken2
+*.tmp
+
+# --- Misc generated artefacts ---
+*.docx
+*.pptx
+*.pdf
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+
+# --- Local-only working files Claude wrote into the workspace ---
+Centricity_Investment_Proposal.pptx
+Centricity_Playbook_Handoff.docx
+Dashboard_Build_Prompt.md
