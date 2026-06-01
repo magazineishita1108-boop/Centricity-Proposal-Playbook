@@ -3054,12 +3054,7 @@ window.mfBenchmarkPerfFor = function(sub) {
     {
       const s = pptx.addSlide();
       applyDividerMaster(s);
-      s.addText("Investment Proposal", {x:5.1, y:2.65, w:7.5, h:0.9, fontFace:"Cambria", fontSize:44, bold:true, color:COL.black});
-      s.addText("Centricity WealthTech | Products Team", {x:5.1, y:3.55, w:7.5, h:0.5, fontFace:"Cambria", fontSize:14, italic:true, color:COL.gold});
-      s.addText(`Total Corpus: ₹ ${corpus.toFixed(2)} Cr`, {x:5.1, y:4.10, w:7.5, h:0.5, fontFace:"Cambria", fontSize:20, bold:true, color:COL.black});
-      s.addText("Prepared on " + new Date().toLocaleDateString('en-IN', {day:'2-digit', month:'long', year:'numeric'}),
-        {x:5.1, y:4.65, w:7.5, h:0.4, fontFace:"Cambria", fontSize:12, italic:true, color:"333333"});
-      s.addText(window.dataAsOf(), {x:5.1, y:5.05, w:7.5, h:0.4, fontFace:"Cambria", fontSize:12, italic:true, color:"333333"});
+      s.addText("Investment Proposal", {x:5.1, y:3.30, w:7.5, h:0.9, fontFace:"Cambria", fontSize:44, bold:true, color:COL.black});
     }
 
     // -- Market Update section (uploaded slides) — placed just before Portfolio Construct --
