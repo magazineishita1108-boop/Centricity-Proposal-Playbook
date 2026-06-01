@@ -4306,7 +4306,7 @@ function AmountInput({
     if (isNaN(n) || n < 0) n = 0;
     let cr = fromDisp(n);
     let pct = corpus > 0 ? cr / corpus * 100 : 0;
-    pct = Math.max(0, Math.min(100, Math.round(pct * 100) / 100));
+    pct = Math.max(0, Math.min(100, pct));
     onChangePct(pct);
     setText(toDisp(corpus * pct / 100).toFixed(2));
   };
