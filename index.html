@@ -3033,7 +3033,7 @@ window.mfBenchmarkPerfFor = function(sub) {
     slide.addShape("rect", {x:0, y:6.60, w:13.333, h:0.90, fill:{color:COL.black}, line:{color:COL.black}});
   }
 
-  async function exportPpt(selected, corpus) {
+  async function exportPpt(selected, corpus, corpusUnit) {
     try {
     if (typeof PptxGenJS === 'undefined') {
       alert('PowerPoint library failed to load — please check your internet connection (PptxGenJS is loaded from CDN).');
@@ -3042,6 +3042,13 @@ window.mfBenchmarkPerfFor = function(sub) {
     const pptx = new PptxGenJS();
     pptx.defineLayout({ name:"LAYOUT_WIDE", width:13.333, height:7.5 });
     pptx.layout = "LAYOUT_WIDE";
+    // Amount unit follows the dashboard Cr/Lakhs toggle. corpus + all derived allocation amounts
+    // are stored internally in Cr; for Lakhs we multiply by 100. Fund AUM (a fund attribute) stays
+    // in ₹ Cr per brand standard and is intentionally NOT converted here.
+    const inLakhs = corpusUnit === 'Lakhs';
+    const uAmt = inLakhs ? 'L' : 'Cr';      // suffix for "₹ X Cr" / "₹ X L"
+    const uParen = inLakhs ? 'L.' : 'Cr.';  // header label "Amount (Cr.)" / "Amount (L.)"
+    const dAmt = cr => (inLakhs ? cr * 100 : cr).toFixed(2);  // Cr → display amount string (2 dp)
     const logoData = await loadLogoData();
     // Uploaded extra slides (Market Update deck, section dividers, Thank You) embedded as
     // full-bleed images in Centricity_ExtraSlides.js. imgSlide adds one as a full slide;
@@ -3171,7 +3178,7 @@ window.mfBenchmarkPerfFor = function(sub) {
         s.addShape("rect", { x, y: cardY, w: cardW, h: 0.08, fill: { color: c.fill }, line: { color: c.fill } });
         s.addText(c.label, { x: x + 0.15, y: cardY + 0.18, w: cardW - 0.3, h: 0.3, fontFace: "Cambria", fontSize: 12, color: "666666" });
         s.addText(c.p.toFixed(2) + "%", { x: x + 0.15, y: cardY + 0.46, w: cardW - 0.3, h: 0.5, fontFace: "Cambria", fontSize: 28, bold: true, color: COL.black });
-        s.addText("₹ " + c.amt.toFixed(2) + " Cr", { x: x + 0.15, y: cardY + 0.98, w: cardW - 0.3, h: 0.3, fontFace: "Cambria", fontSize: 12, color: "666666" });
+        s.addText("₹ " + dAmt(c.amt) + " " + uAmt, { x: x + 0.15, y: cardY + 0.98, w: cardW - 0.3, h: 0.3, fontFace: "Cambria", fontSize: 12, color: "666666" });
       });
       // Stacked bar
       const barY = 2.95, barX = 0.4, barW = 12.5, barH = 0.5;
@@ -3187,7 +3194,7 @@ window.mfBenchmarkPerfFor = function(sub) {
       // Breakdown table
       const hdr = t => ({ text: t, options: { fontFace: "Cambria", fontSize: 11, bold: true, color: COL.white, fill: { color: COL.black }, align: t === "Source" ? "left" : "center", valign: "middle" } });
       const cell = (t, al) => ({ text: t, options: { fontFace: "Cambria", fontSize: 11, color: COL.black, align: al || "center", valign: "middle" } });
-      const rowsBk = [[hdr("Source"), hdr("Amount (₹ Cr)"), hdr("% of Corpus")]];
+      const rowsBk = [[hdr("Source"), hdr("Amount (₹ " + uAmt + ")"), hdr("% of Corpus")]];
       const bd = [
         ["Equity — direct (Equity / Global Funds)", na.eqDirect],
         ["Equity — via Hybrid (analytics split)", na.eqHybrid],
@@ -3195,9 +3202,9 @@ window.mfBenchmarkPerfFor = function(sub) {
         ["Debt — via Hybrid (analytics split)", na.debtHybrid],
         ["Commodity / Other", na.commodity]
       ];
-      bd.forEach(r => { if (r[1] > 0.0001) rowsBk.push([cell(r[0], "left"), cell(r[1].toFixed(2), "right"), cell((r[1] / totalNZ * 100).toFixed(2) + "%", "right")]); });
+      bd.forEach(r => { if (r[1] > 0.0001) rowsBk.push([cell(r[0], "left"), cell(dAmt(r[1]), "right"), cell((r[1] / totalNZ * 100).toFixed(2) + "%", "right")]); });
       const totOpt = al => ({ fontFace: "Cambria", fontSize: 11, bold: true, color: COL.black, fill: { color: COL.tan }, align: al, valign: "middle" });
-      rowsBk.push([{ text: "TOTAL", options: totOpt("left") }, { text: na.total.toFixed(2), options: totOpt("right") }, { text: "100.00%", options: totOpt("right") }]);
+      rowsBk.push([{ text: "TOTAL", options: totOpt("left") }, { text: dAmt(na.total), options: totOpt("right") }, { text: "100.00%", options: totOpt("right") }]);
       s.addTable(rowsBk, { x: 0.4, y: 3.8, w: 12.5, colW: [7.5, 2.5, 2.5], border: { type: "solid", pt: 0.5, color: "BFBFBF" }, rowH: 0.34 });
       s.addText("Hybrid funds are split into equity and debt using their analytics equity holding. Commodity (Gold/Silver) is neither equity nor debt and is shown separately.",
         { x: 0.4, y: 6.95, w: 12.5, h: 0.3, fontFace: "Cambria", fontSize: 9, italic: true, color: "555555" });
@@ -3313,7 +3320,7 @@ window.mfBenchmarkPerfFor = function(sub) {
         [
           {text:"Tenure",       options: {...headerOpts, rowspan: 2}},
           {text:"Instruments",  options: {...headerOpts, rowspan: 2}},
-          {text:"Amount (Cr.)", options: {...headerOpts, rowspan: 2}},
+          {text:"Amount (" + uParen + ")", options: {...headerOpts, rowspan: 2}},
           {text:"% Total",      options: {...headerOpts, rowspan: 2}},
           {text:"Expected Pre-Tax IRR", options: {...headerOpts, colspan: 2}},
           {text:"3Y",           options: {...headerOpts, rowspan: 2}},
@@ -3341,7 +3348,7 @@ window.mfBenchmarkPerfFor = function(sub) {
         bodyRows.push([
           cellL(ac.toUpperCase(), COL.greyM, true),
           blankCell(COL.greyM),
-          cellC((corpus*acPct/100).toFixed(2), COL.greyM, true),
+          cellC(dAmt(corpus*acPct/100), COL.greyM, true),
           cellC(acPct.toFixed(2)+"%", COL.greyM, true),
           cellC(wr(acAgg,'irr_low'), COL.greyM, true),
           cellC(wr(acAgg,'irr_high'), COL.greyM, true),
@@ -3356,7 +3363,7 @@ window.mfBenchmarkPerfFor = function(sub) {
           bodyRows.push([
             blankCell(COL.tan),
             cellL(pc, COL.tan, true),
-            cellC((corpus*pcPct/100).toFixed(2), COL.tan, true),
+            cellC(dAmt(corpus*pcPct/100), COL.tan, true),
             cellC(pcPct.toFixed(2)+"%", COL.tan, true),
             cellC(wr(pcAgg,'irr_low'), COL.tan, true),
             cellC(wr(pcAgg,'irr_high'), COL.tan, true),
@@ -3373,7 +3380,7 @@ window.mfBenchmarkPerfFor = function(sub) {
             bodyRows.push([
               blankCell(COL.greyL),
               cellL("    " + sc, COL.greyL, true),
-              cellC((corpus*scPct/100).toFixed(2), COL.greyL, true),
+              cellC(dAmt(corpus*scPct/100), COL.greyL, true),
               cellC(scPct.toFixed(2)+"%", COL.greyL, true),
               cellC(wr(scAgg,'irr_low'), COL.greyL, true),
               cellC(wr(scAgg,'irr_high'), COL.greyL, true),
@@ -3388,7 +3395,7 @@ window.mfBenchmarkPerfFor = function(sub) {
               bodyRows.push([
                 cellC(tenure, COL.white),
                 cellC(f.name, COL.white),
-                cellC((corpus*sel.pct/100).toFixed(2), COL.white),
+                cellC(dAmt(corpus*sel.pct/100), COL.white),
                 cellC(sel.pct.toFixed(2)+"%", COL.white),
                 cellC(fmtPct(f.irr_low), COL.white),
                 cellC(fmtPct(f.irr_high), COL.white),
@@ -3408,7 +3415,7 @@ window.mfBenchmarkPerfFor = function(sub) {
       const grandTotalRow = [
         {text:"GRAND TOTAL", options:{fontFace:"Cambria", fontSize:9, bold:true, fill:{color:COL.black}, color:COL.white, align:"left", margin:[0.02,0.02,0.02,LEFT_MARGIN_IN]}},
         {text:"", options:{fill:{color:COL.black}}},
-        blackBold((corpus*totPct/100).toFixed(2)),
+        blackBold(dAmt(corpus*totPct/100)),
         blackBold(totPct.toFixed(2)+"%"),
         blackBold(fmtPct(tot.irr_low)),
         blackBold(fmtPct(tot.irr_high)),
@@ -6786,7 +6793,7 @@ function App() {
     corpusUnit: corpusUnit,
     master: master,
     onExportXlsx: () => window.EXPORTS.exportXlsx(planSelected, corpus, planMaster),
-    onExportPpt: () => window.EXPORTS.exportPpt(planSelected, corpus),
+    onExportPpt: () => window.EXPORTS.exportPpt(planSelected, corpus, corpusUnit),
     onExportMaster: () => window.EXPORTS.exportMaster(master),
     onClear: () => setSelected([])
   })), /*#__PURE__*/React.createElement(SectionCard, {
