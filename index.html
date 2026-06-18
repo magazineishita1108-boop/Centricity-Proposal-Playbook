@@ -2294,94 +2294,164 @@ window.mfBenchmarkPerfFor = function(sub) {
     return n / 100;  // mcap also stored as %
   }
 
+  // Format a JS Date as the dashboard's as-on label, e.g. "1st June 2026".
+  function fmtAsOn(d) {
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const day = d.getDate(), j = day % 10, k = day % 100;
+    const suf = (j === 1 && k !== 11) ? 'st' : (j === 2 && k !== 12) ? 'nd' : (j === 3 && k !== 13) ? 'rd' : 'th';
+    return day + suf + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+  }
+
+  // Best-effort date extraction from a file name (or any string). Returns a Date or null.
+  function dateFromName(name) {
+    if (!name) return null;
+    const MON = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+    let m;
+    // "30th May 2026" / "30 May 2026" / "30-May-2026"
+    m = name.match(/(\d{1,2})(?:st|nd|rd|th)?[\s_.-]+([A-Za-z]{3,9})[\s_.-]+(\d{4})/);
+    if (m) { const mo = MON[m[2].slice(0,3).toLowerCase()]; if (mo != null) { const d = new Date(+m[3], mo, +m[1]); if (!isNaN(d)) return d; } }
+    // ISO 2026-05-30
+    m = name.match(/(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})/);
+    if (m) { const d = new Date(+m[1], +m[2]-1, +m[3]); if (!isNaN(d)) return d; }
+    // DMY 30-05-2026 / 30.05.2026
+    m = name.match(/(\d{1,2})[-_.](\d{1,2})[-_.](\d{4})/);
+    if (m) { const d = new Date(+m[3], +m[2]-1, +m[1]); if (!isNaN(d)) return d; }
+    return null;
+  }
+
   // ===== MF Monitor parser =====
   REFRESH.parseMfMonitor = async function(file) {
     try {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const updated = [];
-    const newFunds = [];
-    const masterByName = {};
-    (window.MASTER || []).forEach(f => masterByName[f.name] = f);
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const updated = [];
+      const newFunds = [];
+      const masterByName = {};
+      (window.MASTER || []).forEach(f => masterByName[f.name] = f);
+      window.MF_BENCHMARK_PERF = window.MF_BENCHMARK_PERF || {};
 
-    for (const sn of wb.SheetNames) {
-      if (!(sn in SHEET_MAP)) continue;
-      const [ac, pc, sub] = SHEET_MAP[sn];
-      const sheet = wb.Sheets[sn];
-      const ref = sheet['!ref']; if (!ref) continue;
-      const range = XLSX.utils.decode_range(ref);
-      // Header at row 12 (1-indexed) → index 11
-      const HEADER_ROW = 11;
-      const headers = [];
-      for (let c = range.s.c; c <= range.e.c; c++) {
-        const v = cellVal(sheet, HEADER_ROW, c);
-        headers.push(v ? String(v).trim() : '');
+      // Return columns shared by fund rows and benchmark rows.
+      const RET_COLS = [['mtd','MTD'],['r1m','1 Month'],['r3m','3 Months'],['r6m','6 Months'],
+        ['r1y','1 Year'],['r2y','2 Years'],['r3y','3 Years'],['r5y','5 Years'],
+        ['r10y','10 Years'],['si','SINCE INCEPTION']];
+      // New international funds consolidate under the Global tab (see SHEET_MAP 'Global').
+      const INTL_RE = /\b(US|U\.S\.|NASDAQ|S&P\s*500|Global|World|Emerging|China|Japan|Europe|Asia|Developed|International|FANG|Overseas|REIT|MSCI|FTSE|Hang\s*Seng)\b/i;
+      let asOnDate = null;  // performance as-on date detected from the file
+
+      for (const sn of wb.SheetNames) {
+        const sheet = wb.Sheets[sn];
+        if (!sheet) continue;
+        const ref = sheet['!ref']; if (!ref) continue;
+        const range = XLSX.utils.decode_range(ref);
+
+        // Locate the header row dynamically (col0 === "Scheme Name"); fall back to index 11.
+        let HEADER_ROW = -1;
+        for (let rr = range.s.r; rr <= Math.min(range.s.r + 25, range.e.r); rr++) {
+          const c0 = cellVal(sheet, rr, 0);
+          if (c0 && String(c0).trim().toLowerCase() === 'scheme name') { HEADER_ROW = rr; break; }
+        }
+        if (HEADER_ROW < 0) continue;  // not a fund/benchmark sheet (e.g. "Home")
+
+        const headers = [];
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const v = cellVal(sheet, HEADER_ROW, c);
+          headers.push(v != null ? String(v).trim() : '');
+        }
+        const idx = (name) => headers.indexOf(name);
+        const pickAt = (r, cn) => { const i = headers.indexOf(cn); return i >= 0 ? pctToDec(cellVal(sheet, r, i)) : null; };
+
+        // The AUM column header on debt sheets carries the monitor's as-on date.
+        const aumHdr = cellVal(sheet, HEADER_ROW, 1);
+        if (aumHdr instanceof Date && !isNaN(aumHdr)) { if (!asOnDate || aumHdr > asOnDate) asOnDate = aumHdr; }
+        else if (typeof aumHdr === 'string') { const d = dateFromName(aumHdr); if (d && (!asOnDate || d > asOnDate)) asOnDate = d; }
+
+        const map = SHEET_MAP[sn];           // fund taxonomy (undefined for benchmark-only sheets)
+        const isDebt = DEBT_STYLE_SHEETS.has(sn);
+        const benchRows = [];
+        let fundsDone = false, benchMode = false;
+
+        for (let r = HEADER_ROW + 1; r <= range.e.r; r++) {
+          const raw = cellVal(sheet, r, 0);
+          if (raw == null || raw === '') continue;
+          const nm = String(raw).trim();
+          const low = nm.toLowerCase();
+
+          // Footer markers end the fund list. "BenchMark" begins the index rows; "Average" is skipped.
+          if (low === 'benchmark' || low.startsWith('benchmark')) { fundsDone = true; benchMode = true; continue; }
+          if (low === 'average') { fundsDone = true; continue; }
+
+          if (benchMode) {
+            // Bare benchmark / index row → capture returns for the Performance Sheet.
+            const row = { name: nm };
+            let any = false;
+            for (const [k, cn] of RET_COLS) { const v = pickAt(r, cn); if (v != null) { row[k] = v; any = true; } }
+            if (any) benchRows.push(row);
+            continue;
+          }
+          if (fundsDone) continue;  // gap rows between the fund list and the benchmark block
+
+          // ----- Fund row -----
+          if (!map) continue;  // benchmark-only sheet: no fund taxonomy to merge into
+          if (low.includes('segregated portfolio') || low.includes('unclaimed') || low.includes('investor education')) continue;
+          const aumRaw = cellVal(sheet, r, 1);
+          if (aumRaw == null || aumRaw === '' || isNaN(Number(aumRaw))) continue;  // funds must have a numeric AUM
+
+          let f = masterByName[nm];
+          const isNew = !f;
+          if (isNew) {
+            let [ac, pc, sub] = map;
+            if (INTL_RE.test(nm)) { ac = 'Global Funds'; pc = 'Mutual Funds'; sub = 'International'; }
+            f = { name: nm, asset_class: ac, product_class: pc, sub_category: sub };
+            masterByName[nm] = f;
+            newFunds.push(f);
+          }
+          // Non-null merge: never overwrite an existing value with null/blank.
+          const set = (k, v) => { if (v != null && !(typeof v === 'number' && isNaN(v))) f[k] = v; };
+          set('aum', Number(aumRaw));
+          for (const [k, cn] of RET_COLS) set(k, pickAt(r, cn));
+          set('expense', pickAt(r, 'Ratio'));
+          const ini = idx('Inception Date');
+          if (ini >= 0) { const v = cellVal(sheet, r, ini); if (v instanceof Date) set('inception', v.toISOString().slice(0, 10)); else if (v) set('inception', String(v)); }
+          const fmi = idx('[Fund Manager 1]') >= 0 ? idx('[Fund Manager 1]') : idx('Fund Manager');
+          if (fmi >= 0) set('fund_mgr', cellVal(sheet, r, fmi) || null);
+          const eli = idx('[Exit Load]') >= 0 ? idx('[Exit Load]') : idx('Exit Load');
+          if (eli >= 0) set('exit_load', cellVal(sheet, r, eli) || null);
+          if (isDebt) {
+            set('ytm', pctToDec(cellVal(sheet, r, idx('YTM (%)'))));
+            set('avg_maturity', cellVal(sheet, r, idx('Average Maturity Years')));
+            set('mod_duration', cellVal(sheet, r, idx('Modified Duration Years')));
+          } else {
+            const lci = idx('Large Cap');
+            if (lci >= 0) {  // only equity-style sheets carry the market-cap split
+              set('mcap_large', mcapDec(cellVal(sheet, r, lci)));
+              set('mcap_mid',   mcapDec(cellVal(sheet, r, idx('Mid Cap'))));
+              set('mcap_small', mcapDec(cellVal(sheet, r, idx('Small Cap'))));
+              set('mcap_other', mcapDec(cellVal(sheet, r, idx('Others'))));
+            }
+          }
+          if (!isNew) updated.push(nm);
+        }
+
+        // Refresh this sheet's benchmark performance only when rows were actually found.
+        if (benchRows.length) window.MF_BENCHMARK_PERF[sn] = benchRows;
       }
-      // Map column-name → index
-      const col = (name) => headers.indexOf(name);
-      const isDebt = DEBT_STYLE_SHEETS.has(sn);
-      // Loop data rows (row 13 onward → index 12+)
-      for (let r = HEADER_ROW + 1; r <= range.e.r; r++) {
-        const name = cellVal(sheet, r, 0);
-        if (!name) continue;
-        const aum = cellVal(sheet, r, 1);
-        if (!aum || isNaN(Number(aum))) continue;
-        let f = masterByName[name];
-        const isNew = !f;
-        if (isNew) {
-          f = { name, asset_class: ac, product_class: pc, sub_category: sub };
-          newFunds.push(f);
-        }
-        f.aum = Number(aum);
-        // Common return columns
-        const pick = (cn) => {
-          const i = headers.indexOf(cn);
-          return i >= 0 ? pctToDec(cellVal(sheet, r, i)) : null;
-        };
-        f.mtd = pick('MTD');
-        f.r1m = pick('1 Month');
-        f.r3m = pick('3 Months');
-        f.r6m = pick('6 Months');
-        f.r1y = pick('1 Year');
-        f.r2y = pick('2 Years');
-        f.r3y = pick('3 Years');
-        f.r5y = pick('5 Years');
-        f.r10y = pick('10 Years');
-        f.si = pick('SINCE INCEPTION');
-        const eri = headers.indexOf('Ratio');
-        f.expense = eri >= 0 ? pctToDec(cellVal(sheet, r, eri)) : null;
-        const ini = headers.indexOf('Inception Date');
-        if (ini >= 0) {
-          const v = cellVal(sheet, r, ini);
-          if (v instanceof Date) f.inception = v.toISOString().slice(0, 10);
-          else if (v) f.inception = String(v);
-        }
-        const fmi = headers.indexOf('[Fund Manager 1]');
-        if (fmi >= 0) f.fund_mgr = cellVal(sheet, r, fmi) || null;
-        const eli = headers.indexOf('[Exit Load]');
-        if (eli >= 0) f.exit_load = cellVal(sheet, r, eli) || null;
-        if (isDebt) {
-          f.ytm = pctToDec(cellVal(sheet, r, headers.indexOf('YTM (%)')));
-          f.avg_maturity = cellVal(sheet, r, headers.indexOf('Average Maturity Years'));
-          f.mod_duration = cellVal(sheet, r, headers.indexOf('Modified Duration Years'));
-        } else {
-          f.mcap_large = mcapDec(cellVal(sheet, r, headers.indexOf('Large Cap')));
-          f.mcap_mid = mcapDec(cellVal(sheet, r, headers.indexOf('Mid Cap')));
-          f.mcap_small = mcapDec(cellVal(sheet, r, headers.indexOf('Small Cap')));
-          f.mcap_other = mcapDec(cellVal(sheet, r, headers.indexOf('Others')));
-        }
-        updated.push(name);
-      }
-    }
-    // Append new funds to MASTER
-    if (newFunds.length) window.MASTER = (window.MASTER || []).concat(newFunds);
-    return {
-      ok: true,
-      updated: updated.length,
-      newFunds: newFunds.length,
-      asOn: new Date().toISOString().slice(0, 10),
-      message: `Updated ${updated.length} schemes${newFunds.length ? ` (+${newFunds.length} new)` : ''}.`
-    };
+
+      // Append genuinely new funds to MASTER.
+      if (newFunds.length) window.MASTER = (window.MASTER || []).concat(newFunds);
+
+      // Update the Performance Sheet's as-on date (prefer the in-file date, else the file name).
+      let asOnStr = null;
+      if (asOnDate instanceof Date && !isNaN(asOnDate)) asOnStr = fmtAsOn(asOnDate);
+      else { const fd = dateFromName(file && file.name); if (fd) asOnStr = fmtAsOn(fd); }
+      if (asOnStr && window.DATA_DATES) window.DATA_DATES.performance = asOnStr;
+
+      return {
+        ok: true,
+        updated: updated.length,
+        newFunds: newFunds.length,
+        asOn: asOnStr || new Date().toISOString().slice(0, 10),
+        message: `Updated ${updated.length} schemes${newFunds.length ? ` (+${newFunds.length} new)` : ''}${asOnStr ? ` · as on ${asOnStr}` : ''}.`
+      };
     } catch (err) {
       console.error('parseMfMonitor error', err);
       return { ok: false, error: err && err.message ? err.message : String(err) };
@@ -6635,7 +6705,7 @@ function App() {
 
   // Bump to force re-render of children after master/analytics refresh
   const [dataVer, setDataVer] = useS3(0);
-  const onDataRefreshed = () => setDataVer(v => v + 1);
+  const onDataRefreshed = () => { if (window.MASTER) setMaster(window.MASTER.slice()); setDataVer(v => v + 1); };
   const selectedNames = useM3(() => new Set(selected.map(s => s.fund.name)), [selected]);
   // Plan-adjusted views. `selected`/`master` always hold the canonical Regular fund objects
   // (so edits, switches and adds stay correct); the Direct overlay is applied only for
