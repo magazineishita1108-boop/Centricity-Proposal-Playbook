@@ -1028,6 +1028,10 @@ window.linkIdcwToGrowth();
       if (da !== 0) return da;
       const dp = pcIdx(a.product_class) - pcIdx(b.product_class);
       if (dp !== 0) return dp;
+      // Manually-added bonds (sub_category "Added Bonds") always sort below the
+      // desk-sourced bond options (Invictus, OneDigital) within Debt › Bonds.
+      const dr = (a.sub_category === "Added Bonds" ? 1 : 0) - (b.sub_category === "Added Bonds" ? 1 : 0);
+      if (dr !== 0) return dr;
       const dsc = (a.sub_category || "").localeCompare(b.sub_category || "");
       if (dsc !== 0) return dsc;
       return (a.name || "").localeCompare(b.name || "");
@@ -1052,7 +1056,11 @@ window.linkIdcwToGrowth();
       ac.children = Object.values(ac.children).sort((a, b) => pcIdx(a.name) - pcIdx(b.name));
       ac.count = 0;
       for (const pc of ac.children) {
-        pc.children = Object.values(pc.children).sort((a, b) => a.name.localeCompare(b.name));
+        // "Added Bonds" (manual entries) sorts after the desk sub-categories.
+        pc.children = Object.values(pc.children).sort((a, b) => {
+          const dr = (a.name === "Added Bonds" ? 1 : 0) - (b.name === "Added Bonds" ? 1 : 0);
+          return dr !== 0 ? dr : a.name.localeCompare(b.name);
+        });
         pc.count = 0;
         for (const sc of pc.children) pc.count += sc.count;
         ac.count += pc.count;
@@ -3047,7 +3055,7 @@ window.mfBenchmarkPerfFor = function(sub) {
     const wb = XLSX.utils.book_new();
     const cols = ["name","asset_class","product_class","sub_category","irr_low","irr_high","aum",
       "r1m","r3m","r6m","r1y","r2y","r3y","r5y","r10y","si","expense","inception","fund_mgr","exit_load",
-      "mcap_large","mcap_mid","mcap_small","mcap_other","ytm","avg_maturity","mod_duration","bond_issuer","bond_rating"];
+      "mcap_large","mcap_mid","mcap_small","mcap_other","ytm","avg_maturity","mod_duration","bond_issuer","bond_rating","bond_maturity"];
     const aoa = [cols];
     for (const f of master) aoa.push(cols.map(c => f[c] ?? ""));
     const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -4116,11 +4124,103 @@ function CentricitySelectPopover({ fund, info, onClose }) {
   )));
 }
 
+// ===== Add Bond Option form (Section 3 · Debt › Bonds) =====
+// Lets the Products team add a new bond to the universe with name, maturity date,
+// expected pre-tax IRR (yield) and rating. onAddBond returns true on success.
+function AddBondForm({ onAddBond }) {
+  const [name, setName] = useState("");
+  const [maturity, setMaturity] = useState("");
+  const [yld, setYld] = useState("");
+  const [rating, setRating] = useState("");
+  const [msg, setMsg] = useState(null); // { ok, text }
+  const RATINGS = ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-", "BBB+", "BBB", "BBB-", "BB", "B", "Unrated"];
+  const submit = () => {
+    const ok = onAddBond({ name: name, maturity: maturity, yieldPct: yld, rating: rating });
+    if (ok) {
+      setMsg({ ok: true, text: "Added “" + name.trim() + "” under Debt › Bonds › Added Bonds (below Invictus & OneDigital). Switch to Browse Bonds to see it — selectable and saved with the Master export." });
+      setName(""); setMaturity(""); setYld(""); setRating("");
+    }
+  };
+  const inStyle = { width: "100%", border: "1px solid var(--border)", background: "#fff", padding: "6px 8px", fontFamily: "Cambria, Georgia, serif", fontSize: 13, boxSizing: "border-box" };
+  const lbl = t => /*#__PURE__*/React.createElement("label", { style: { display: "block", fontSize: 11, fontWeight: 700, color: "var(--brown-text)", marginBottom: 3, letterSpacing: ".02em" } }, t);
+  return /*#__PURE__*/React.createElement("div", {
+    style: { border: "1px solid var(--gold)", background: "var(--bg-yellow)", padding: 14 }
+  },
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "var(--black)", marginBottom: 4 } }, "Add Bond Option"),
+    /*#__PURE__*/React.createElement("div", { className: "hint", style: { marginTop: 0, marginBottom: 12 } }, "Add a bond to the universe. It appears under Debt › Bonds, becomes selectable in the proposal, and is saved with the Master export."),
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } }, lbl("Bond Name"), /*#__PURE__*/React.createElement("input", { style: inStyle, placeholder: "e.g. 9.25 ABC Capital Ltd 2029", value: name, onChange: e => setName(e.target.value) })),
+    /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", null, lbl("Maturity Date"), /*#__PURE__*/React.createElement("input", { type: "date", style: inStyle, value: maturity, onChange: e => setMaturity(e.target.value) })),
+      /*#__PURE__*/React.createElement("div", null, lbl("Pre-tax IRR / Yield (%)"), /*#__PURE__*/React.createElement("input", { type: "number", step: "0.01", min: "0", style: inStyle, placeholder: "e.g. 9.50", value: yld, onChange: e => setYld(e.target.value) })),
+      /*#__PURE__*/React.createElement("div", null, lbl("Rating"),
+        /*#__PURE__*/React.createElement("input", { list: "centricity-bond-ratings", style: inStyle, placeholder: "e.g. AA+", value: rating, onChange: e => setRating(e.target.value) }),
+        /*#__PURE__*/React.createElement("datalist", { id: "centricity-bond-ratings" }, RATINGS.map(r => /*#__PURE__*/React.createElement("option", { key: r, value: r })))
+      )
+    ),
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
+      /*#__PURE__*/React.createElement("button", { className: "btn-add", onClick: submit }, "+ Add Bond"),
+      msg && /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: msg.ok ? "var(--green)" : "var(--red)" } }, msg.text)
+    )
+  );
+}
+
+// ===== Added-Bonds quick-pick dropdown (Section 3 · Debt › Bonds › Added Bonds) =====
+// Lists every manually-added bond in a dropdown; the chosen bond is added straight to the
+// proposal (Section 4) via the same onAdd handler the list rows use.
+function AddedBondPicker({ bonds, selectedNames, onAdd }) {
+  const [pick, setPick] = useState("");
+  const [msg, setMsg] = useState(null);
+  const chosen = bonds.find(b => b.name === pick) || null;
+  const already = !!(chosen && selectedNames.has(chosen.name));
+  const add = () => {
+    if (!chosen) return;
+    if (selectedNames.has(chosen.name)) { setMsg("“" + chosen.name + "” is already in your proposal."); return; }
+    onAdd(chosen);
+    setMsg("Added “" + chosen.name + "” to the proposal (Section 4).");
+    setPick("");
+  };
+  if (!bonds.length) {
+    return /*#__PURE__*/React.createElement("div", { className: "hint", style: { marginTop: 0, marginBottom: 8 } }, "No bonds added yet — use the “+ Add Bond Option” tab to add one.");
+  }
+  const selStyle = { flex: 1, minWidth: 0, border: "1px solid var(--border)", background: "#fff", padding: "6px 8px", fontFamily: "Cambria, Georgia, serif", fontSize: 13 };
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const fmtMat = iso => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return String(d.getDate()).padStart(2, "0") + " " + MON[d.getMonth()] + " " + d.getFullYear();
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: { border: "1px solid var(--gold)", background: "#fff", padding: 10, marginBottom: 8 }
+  },
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "var(--brown-text)", marginBottom: 6, letterSpacing: ".02em" } }, "QUICK-PICK AN ADDED BOND"),
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+      /*#__PURE__*/React.createElement("select", {
+        value: pick, onChange: e => { setPick(e.target.value); setMsg(null); }, style: selStyle
+      }, /*#__PURE__*/React.createElement("option", { value: "" }, "Select an added bond…"),
+        bonds.map(b => /*#__PURE__*/React.createElement("option", { key: b.name, value: b.name },
+          b.name + "  (" + H.fmtPct(b.irr_high) + (b.bond_rating ? " · " + b.bond_rating : "") + ")"))
+      ),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn-add" + (already ? " added" : ""), disabled: !chosen || already,
+        onClick: add, style: { whiteSpace: "nowrap" }
+      }, already ? "✓ In proposal" : "+ Add to proposal")
+    ),
+    chosen && /*#__PURE__*/React.createElement("div", {
+      style: { marginTop: 10, padding: "8px 10px", background: "var(--bg-yellow)", border: "1px solid var(--border)", fontSize: 12.5 }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", null, chosen.name)),
+      /*#__PURE__*/React.createElement("div", { style: { marginTop: 4, color: "var(--ink-soft)" } },
+        "Maturity: " + fmtMat(chosen.bond_maturity) + "  ·  Pre-tax IRR / Yield: " + H.fmtPct(chosen.irr_high) + "  ·  Rating: " + (chosen.bond_rating || "—"))),
+    msg && /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "var(--green)", marginTop: 6 } }, msg)
+  );
+}
+
 function PickFundsPane({
   master,
   selectedNames,
   corpus,
-  onAdd
+  onAdd,
+  onAddBond
 }) {
   const [treeSearch, setTreeSearch] = useState("");
   const [fundSearch, setFundSearch] = useState("");
@@ -4130,6 +4230,13 @@ function PickFundsPane({
   const [expanded, setExpanded] = useState({});
   const [filter, setFilter] = useState(null);
   const [csPopover, setCsPopover] = useState(null); // {fund, info}
+  // Bonds sub-view tab: 'browse' the universe or 'add' a new bond option
+  const [bondTab, setBondTab] = useState("browse");
+  const isBondsView = !!(filter && filter.pc === "Bonds");
+  // Every manually-added bond (Debt › Bonds › Added Bonds) — shown in the "Added Bonds" tab
+  const addedBonds = useMemo(() => master.filter(f => f.product_class === "Bonds" && f.sub_category === "Added Bonds").sort((a, b) => (a.name || "").localeCompare(b.name || "")), [master]);
+  // Leaving the Bonds view always returns the pane to the browse list
+  useEffect(() => { if (!isBondsView && bondTab !== "browse") setBondTab("browse"); }, [isBondsView, bondTab]);
   const tree = useMemo(() => H.buildTree(master), [master]);
   const onToggle = p => {
     setExpanded(e => Object.assign({}, e, {
@@ -4261,7 +4368,25 @@ function PickFundsPane({
       cursor: "pointer",
       fontSize: 11
     }
-  }, "Clear")), /*#__PURE__*/React.createElement("div", {
+  }, "Clear")), isBondsView && /*#__PURE__*/React.createElement("div", {
+    className: "tabs",
+    style: { marginBottom: 8 }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab " + (bondTab === "browse" ? "active" : ""),
+    onClick: () => setBondTab("browse")
+  }, "Browse Bonds"), /*#__PURE__*/React.createElement("button", {
+    className: "tab " + (bondTab === "added" ? "active" : ""),
+    onClick: () => setBondTab("added")
+  }, "Added Bonds" + (addedBonds.length ? " (" + addedBonds.length + ")" : "")), /*#__PURE__*/React.createElement("button", {
+    className: "tab " + (bondTab === "add" ? "active" : ""),
+    onClick: () => setBondTab("add")
+  }, "+ Add Bond Option")), (isBondsView && bondTab === "add") ? /*#__PURE__*/React.createElement(AddBondForm, {
+    onAddBond: onAddBond
+  }) : (isBondsView && bondTab === "added") ? /*#__PURE__*/React.createElement(AddedBondPicker, {
+    bonds: addedBonds,
+    selectedNames: selectedNames,
+    onAdd: onAdd
+  }) : /*#__PURE__*/React.createElement("div", {
     className: "list-scroll"
   }, visible.map(f => {
     const added = selectedNames.has(f.name);
@@ -6737,6 +6862,51 @@ function App() {
       strategy: H.defaultStrategy(f)
     }]);
   };
+  // Manually add a new bond option to the universe (Section 3 · Debt › Bonds · Add Bond Option).
+  // Yield is the expected pre-tax IRR; per the Bonds convention irr_low = irr_high = r1y = r3y =
+  // r5y = yield, and the maturity date drives the Hold-to-maturity exit load. The record is added
+  // to both the live universe (so it is instantly selectable) and window.MASTER, so it flows into
+  // the downloadable Master export. Returns true on success.
+  const addBondOption = b => {
+    const nm = (b && b.name || "").trim();
+    if (!nm) { window.alert("Please enter a bond name."); return false; }
+    if (master.some(m => m.name === nm) || (window.MASTER || []).some(m => m.name === nm)) {
+      window.alert('A product named "' + nm + '" already exists in the universe.');
+      return false;
+    }
+    let y = parseFloat(b.yieldPct);
+    if (isNaN(y) || y <= 0) { window.alert("Please enter a valid pre-tax IRR (yield) %."); return false; }
+    y = Math.round(y * 1e4) / 1e6; // % → decimal, kills float artifacts
+    let exitLoad = "Hold-to-maturity";
+    const iso = (b.maturity || "").trim() || null;
+    if (iso) {
+      const d = new Date(iso);
+      if (!isNaN(d.getTime())) {
+        const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const dd = String(d.getDate()).padStart(2, "0");
+        exitLoad = "Hold-to-maturity (" + dd + "-" + MON[d.getMonth()] + "-" + d.getFullYear() + ")";
+      }
+    }
+    const rec = {
+      name: nm, asset_class: "Debt", product_class: "Bonds", sub_category: "Added Bonds",
+      irr_low: y, irr_high: y, aum: null,
+      r1m: null, r3m: null, r6m: null, r1y: y, r2y: null, r3y: y, r5y: y, r10y: null,
+      si: null, expense: null, inception: null, fund_mgr: null, exit_load: exitLoad,
+      mcap_large: null, mcap_mid: null, mcap_small: null, mcap_other: null,
+      ytm: null, avg_maturity: null, mod_duration: null,
+      bond_issuer: nm, bond_rating: ((b.rating || "").trim() || "NR"), bond_maturity: iso
+    };
+    // IMPORTANT: on a fresh load master state and window.MASTER are the SAME array
+    // reference. A push() would mutate both, and the functional setMaster below would
+    // then see the record already present and return the same reference — React treats
+    // that as "no change", so nothing re-renders and the addedBonds / tree / list memos
+    // stay stale (the bond never appears). Use non-mutating concat so master state gets
+    // a brand-new reference, forcing every [master]-keyed memo to recompute.
+    window.MASTER = window.MASTER || [];
+    if (!window.MASTER.some(m => m.name === nm)) window.MASTER = window.MASTER.concat([rec]);
+    setMaster(prev => prev.some(m => m.name === nm) ? prev : prev.concat([rec]));
+    return true;
+  };
   useE3(() => {
     setSelected(arr => arr.map(s => {
       const updated = master.find(m => m.name === s.fund.name);
@@ -6851,7 +7021,8 @@ function App() {
     master: planMaster,
     selectedNames: selectedNames,
     corpus: corpus,
-    onAdd: addFund
+    onAdd: addFund,
+    onAddBond: addBondOption
   })), /*#__PURE__*/React.createElement(SectionCard, {
     num: "4",
     title: "Selected Funds & Allocation",
