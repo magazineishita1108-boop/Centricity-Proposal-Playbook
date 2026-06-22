@@ -1070,7 +1070,12 @@ window.linkIdcwToGrowth();
   }
 
   // Liquidity classification
+  // Per-fund overrides to the product_class default (e.g. open-ended Cat III AIFs).
+  const LIQ_OVERRIDE = {
+    "Carnelian Bharat Amritkaal Fund": ["Open Ended", "Open-ended AIF; redemption per terms"]
+  };
   function classifyLiquidity(fund) {
+    if (LIQ_OVERRIDE[fund.name]) return LIQ_OVERRIDE[fund.name];
     const sub = (fund.sub_category || "").toLowerCase();
     if (sub === "elss") return ["Close Ended", "3-year lock-in"];
     if (sub.includes("solution")) return ["Close Ended", "5-year lock-in"];
