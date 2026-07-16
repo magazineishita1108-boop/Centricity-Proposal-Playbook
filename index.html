@@ -3836,6 +3836,9 @@ window.mfBenchmarkPerfFor = function(sub) {
       buckets[b].push(f);
     }
     const bucketOrder = ["Equity Mutual Funds", "Hybrid Mutual Funds", "Debt Mutual Funds", "PMS — Equity", "AIF", "Other"];
+    // Allocation weight per fund name (% allocation) for the portfolio-weighted return row.
+    const perfWt = {};
+    selected.forEach(sl => { perfWt[sl.fund.name] = (perfWt[sl.fund.name] || 0) + sl.pct; });
     for (const bn of bucketOrder) {
       if (!buckets[bn] || buckets[bn].length === 0) continue;
       const s = pptx.addSlide();
@@ -3930,6 +3933,27 @@ window.mfBenchmarkPerfFor = function(sub) {
           rows.push(pmsRow);
         }
       }
+      // Portfolio weighted-return row (by % allocation) — one weighted return per tenure column.
+      const wrkeys = kind === 'debt' ? ['r1m','r3m','r6m','r1y','r2y','r3y','r5y','si']
+        : kind === 'pms' ? ['r1m','r3m','r6m','r1y','r2y','r3y','r5y','si']
+        : kind === 'aif' ? ['r1m','r3m','r6m','r1y','r3y','r5y','si']
+        : ['r3m','r6m','r1y','r3y','r5y','r10y','si'];
+      const wdata = wrkeys.map(k => {
+        let acc = 0, w = 0;
+        for (const f of buckets[bn]) { const p = perfWt[f.name] || 0; const v = f[k]; if (p > 0 && v != null && !isNaN(v)) { acc += v * p; w += p; } }
+        return w > 0 ? acc / w : null;
+      });
+      const wRow = [
+        {text: "Portfolio Weighted (by % allocation)", options: cOpt(COL.tan, true, "left")},
+        {text: "—", options: cOpt(COL.tan, true)},
+        {text: "—", options: cOpt(COL.tan, true)}
+      ];
+      for (let j = 0; j < cols.length - 3; j++) {
+        const v = j < wdata.length ? wdata[j] : null;
+        const txt = (v == null || isNaN(v)) ? "—" : (v * 100).toFixed(2) + "%";
+        wRow.push({text: txt, options: cOpt(COL.tan, true)});
+      }
+      rows.push(wRow);
       const _dataCount = cols.length - 3;
       const colW = debtMode
         ? [3.2, 0.55, 0.7, ...Array(_dataCount).fill(0.65)]
@@ -3964,36 +3988,37 @@ window.mfBenchmarkPerfFor = function(sub) {
       const cOptM = (fill, align, color, bold) => ({fontFace:"Cambria", fontSize:8, bold:!!bold, fill:{color:fill||"FFFFFF"}, color:color||COL.black, align:align||"right", valign:"middle"});
       const header = [{text:"Instrument", options:{...hOptM, align:"left"}}, {text:"% Alloc", options:hOptM}, ...MCOLS.map(c=>({text:c.label, options:hOptM}))];
       const mrows = [header];
-      let accRR=0,wRR=0, accC=0,wC=0, tot=0, cover=0;
+      let tot=0, cover=0;
+      const accCol={}, wCol={};
+      for (const c of MCOLS) { accCol[c.k]=0; wCol[c.k]=0; }
       const ordered = (H.orderSelected ? H.orderSelected(selected).map(x=>x.s) : selected);
       for (const sel of ordered) {
         const f = sel.fund, r = RM[f.name] || null;
         const amt = corpus * sel.pct/100; tot += amt;
         if (r) cover += amt;
-        if (r && r.rr!=null){accRR+=r.rr*amt; wRR+=amt;}
-        if (r && r.c!=null){accC+=r.c*amt; wC+=amt;}
         const row = [{text:f.name, options:cOptM("FFFFFF","left")}, {text:sel.pct.toFixed(2)+"%", options:cOptM()}];
         for (const c of MCOLS) {
           const v = r ? r[c.k] : null;
+          if (v!=null) { accCol[c.k]+=v*amt; wCol[c.k]+=amt; }
           const txt = (v==null) ? "—" : (v.toFixed(c.dp)+c.suf);
           const col = (c.red && v!=null && v<0) ? COL.red : COL.black;
           row.push({text:txt, options:cOptM("FFFFFF","right",col)});
         }
         mrows.push(row);
       }
-      const bRR = wRR>0? accRR/wRR : null, bC = wC>0? accC/wC : null;
-      const brow = [{text:"PORTFOLIO BLENDED (returns)", options:cOptM(COL.tan,"left",COL.black,true)}, {text:"—", options:cOptM(COL.tan,"right",COL.black,true)}];
+      const brow = [{text:"PORTFOLIO AVERAGE (by % allocation)", options:cOptM(COL.tan,"left",COL.black,true)}, {text:"100%", options:cOptM(COL.tan,"right",COL.black,true)}];
       for (const c of MCOLS) {
-        const txt = c.k==="rr" ? (bRR!=null? bRR.toFixed(2)+"%" : "—") : "";
-        brow.push({text:txt, options:cOptM(COL.tan,"right",(c.k==="rr"&&bRR!=null&&bRR<0)?COL.red:COL.black,true)});
+        const av = wCol[c.k]>0 ? accCol[c.k]/wCol[c.k] : null;
+        const txt = av!=null ? av.toFixed(c.dp)+c.suf : "—";
+        brow.push({text:txt, options:cOptM(COL.tan,"right",(c.red&&av!=null&&av<0)?COL.red:COL.black,true)});
       }
       mrows.push(brow);
       const mColW = [3.0, 0.85, ...Array(MCOLS.length).fill(1.0)];
       s.addTable(mrows, {x:0.25, y:1.0, w:12.85, colW:mColW, border:{type:"solid", pt:0.4, color:"BFBFBF"}, rowH:0.24});
       const covPct = tot>0 ? (cover/tot*100).toFixed(0) : "0";
       s.addText([
-        {text:"Portfolio Blended (allocation-weighted): ", options:{bold:true}},
-        {text:"3Y Rolling " + (bRR!=null? bRR.toFixed(2)+"%" : "—") + "  ·  3Y CAGR " + (bC!=null? bC.toFixed(2)+"%" : "—") + "  ·  covers " + covPct + "% of corpus.  ", options:{}},
+        {text:"Portfolio Average (allocation-weighted): ", options:{bold:true}},
+        {text:"weighted average of each column by % allocation across the funds carrying that metric (covers " + covPct + "% of corpus with risk data).  ", options:{}},
         {text:"Alpha (Jensen) & Correlation derived from published Beta, Std Dev, Tracking Error & Information Ratio vs benchmark (rf 4.5%); “—” = not in equity risk dataset.", options:{italic:true, color:"555555"}}
       ], {x:0.25, y:7.02, w:6.8, h:0.42, fontFace:"Cambria", fontSize:8.5, color:COL.black, valign:"top"});
     }
@@ -6048,7 +6073,6 @@ function PortfolioMatrixTab({ selected, corpus }) {
     }
     return { val: w > 0 ? acc / w : null, cov: tot > 0 ? cov / tot * 100 : 0 };
   };
-  const bRoll = blend("rr"), bCagr = blend("c");
   const covered = rows.filter(s => RM[s.fund.name]).length;
 
   return /*#__PURE__*/React.createElement("div", null,
@@ -6074,30 +6098,21 @@ function PortfolioMatrixTab({ selected, corpus }) {
           );
         }),
         rows.length > 0 && /*#__PURE__*/React.createElement("tr", { className: "tot" },
-          /*#__PURE__*/React.createElement("td", { style: { textAlign: "left" } }, "PORTFOLIO BLENDED (returns)"),
-          /*#__PURE__*/React.createElement("td", { className: "num" }, "—"),
-          ...COLS.map(c => /*#__PURE__*/React.createElement("td", { key: c.k, className: "num" + (c.k === "rr" && bRoll.val != null && bRoll.val < 0 ? " neg" : "") },
-            c.k === "rr" ? (bRoll.val != null ? bRoll.val.toFixed(2) + "%" : "—") : ""))
+          /*#__PURE__*/React.createElement("td", { style: { textAlign: "left" } }, "PORTFOLIO AVERAGE (by % allocation)"),
+          /*#__PURE__*/React.createElement("td", { className: "num" }, "100%"),
+          ...COLS.map(c => {
+            const av = blend(c.k).val;
+            const neg = c.redNeg && av != null && av < 0;
+            return /*#__PURE__*/React.createElement("td", { key: c.k, className: "num" + (neg ? " neg" : "") }, av != null ? av.toFixed(c.dp) + c.suffix : "—");
+          })
         )
-      )
-    ),
-    /*#__PURE__*/React.createElement("div", { style: { marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" } },
-      /*#__PURE__*/React.createElement("div", { className: "kpi accent", style: { flex: "1 1 220px" } },
-        /*#__PURE__*/React.createElement("div", { className: "label" }, "Portfolio Blended 3Y Rolling Return"),
-        /*#__PURE__*/React.createElement("div", { className: "value" }, bRoll.val != null ? bRoll.val.toFixed(2) + "%" : "—"),
-        /*#__PURE__*/React.createElement("div", { className: "sub" }, "Allocation-weighted \xB7 covers ", bRoll.cov.toFixed(0), "% of corpus")
-      ),
-      /*#__PURE__*/React.createElement("div", { className: "kpi accent", style: { flex: "1 1 220px" } },
-        /*#__PURE__*/React.createElement("div", { className: "label" }, "Portfolio Blended 3Y CAGR"),
-        /*#__PURE__*/React.createElement("div", { className: "value" }, bCagr.val != null ? bCagr.val.toFixed(2) + "%" : "—"),
-        /*#__PURE__*/React.createElement("div", { className: "sub" }, "Allocation-weighted \xB7 covers ", bCagr.cov.toFixed(0), "% of corpus")
       )
     ),
     /*#__PURE__*/React.createElement("div", { className: "hint", style: { marginTop: 10 } },
       "Risk & rolling-return metrics as on ", asOn, ". ", covered, " of ", rows.length, " selected instruments have data. ",
+      "PORTFOLIO AVERAGE is the allocation-weighted (% allocation) average of each column across the funds that carry that metric — weights are renormalised per column, so coverage varies by column. ",
       "Alpha (Jensen) and Correlation are derived from each fund's published Beta, Std Dev, Tracking Error and Information Ratio vs its stated benchmark (risk-free 4.5% p.a.). ",
-      "“—” = not in the equity risk dataset (e.g. debt, hybrid, gold / silver, or funds with < 250 trading days). ",
-      "Blended returns are weighted by allocation amount across the funds that carry each metric."
+      "“—” = not in the equity risk dataset (e.g. debt, hybrid, gold / silver, or funds with < 250 trading days)."
     )
   );
 }
@@ -6219,6 +6234,27 @@ function PerfTable({
         }, display);
       }));
     }
+    if (r.type === 'wtd') {
+      // Portfolio weighted return by % allocation — one figure per tenure column; non-return
+      // columns (M-Cap / debt stats) are left blank as "—".
+      return /*#__PURE__*/React.createElement("tr", {
+        key: "wtd" + i,
+        className: "tot-row"
+      }, /*#__PURE__*/React.createElement("td", {
+        className: "l"
+      }, "Portfolio Weighted (by % allocation)"), /*#__PURE__*/React.createElement("td", {
+        className: "c"
+      }, "—"), /*#__PURE__*/React.createElement("td", {
+        className: "c"
+      }, "—"), columns.map((c, j) => {
+        const v = r.cells[j];
+        const display = (v == null || isNaN(v)) ? "—" : (v * 100).toFixed(2) + "%";
+        return /*#__PURE__*/React.createElement("td", {
+          key: j,
+          className: "num " + ((v || 0) < 0 ? "neg" : "")
+        }, display);
+      }));
+    }
     const f = r.fund;
     const cells = debtMode ? [f.r1m, f.r3m, f.r6m, f.r1y, f.r2y, f.r3y, f.r5y, f.si, f.ytm, f.avg_maturity, f.mod_duration] : kind === 'pms' ? [f.r1m, f.r3m, f.r6m, f.r1y, f.r2y, f.r3y, f.r5y, f.si, f.mcap_large, f.mcap_mid, f.mcap_small, f.mcap_other] : kind === 'aif' ? [f.r1m, f.r3m, f.r6m, f.r1y, f.r3y, f.r5y, f.si, f.mcap_large, f.mcap_mid, f.mcap_small, f.mcap_other] : [f.r3m, f.r6m, f.r1y, f.r3y, f.r5y, f.r10y, f.si, f.mcap_large, f.mcap_mid, f.mcap_small, f.mcap_other];
     return /*#__PURE__*/React.createElement("tr", {
@@ -6259,11 +6295,17 @@ function PerformanceTab({
     }
     return map;
   }, [selected]);
+  // Allocation weight per fund name (% allocation), summed across duplicate selections.
+  const wtByName = useM2(() => {
+    const m = {};
+    for (const s of selected) m[s.fund.name] = (m[s.fund.name] || 0) + s.pct;
+    return m;
+  }, [selected]);
   const eqCols = ["3M", "6M", "1Y", "3Y", "5Y", "10Y", "S.I.", "Large", "Mid", "Small", "Others"];
   const dbCols = ["1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y", "S.I.", "YTM", "Avg Mat", "Mod Dur"];
   const pmsCols = ["1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y", "SI", "Large", "Mid", "Small", "Others"];
   const aifCols = ["1M", "3M", "6M", "1Y", "3Y", "5Y", "SI", "Large", "Mid", "Small", "Others"];
-  function buildRows(funds, debtMode) {
+  function buildRows(funds, debtMode, kind) {
     const subs = {};
     for (const f of funds) {
       subs[f.sub_category] = subs[f.sub_category] || [];
@@ -6313,6 +6355,18 @@ function PerformanceTab({
         });
       });
     }
+    // Portfolio weighted-return row (by % allocation) — one weighted return per tenure column,
+    // renormalised over the funds in this sleeve that carry each tenure.
+    const rkeys = kind === 'debt' ? ['r1m','r3m','r6m','r1y','r2y','r3y','r5y','si']
+      : kind === 'pms' ? ['r1m','r3m','r6m','r1y','r2y','r3y','r5y','si']
+      : kind === 'aif' ? ['r1m','r3m','r6m','r1y','r3y','r5y','si']
+      : ['r3m','r6m','r1y','r3y','r5y','r10y','si'];
+    const wcells = rkeys.map(k => {
+      let acc = 0, w = 0;
+      for (const f of funds) { const p = wtByName[f.name] || 0; const v = f[k]; if (p > 0 && v != null && !isNaN(v)) { acc += v * p; w += p; } }
+      return w > 0 ? acc / w : null;
+    });
+    rows.push({ type: 'wtd', cells: wcells });
     return rows;
   }
   if (selected.length === 0) return /*#__PURE__*/React.createElement("div", {
@@ -6324,7 +6378,7 @@ function PerformanceTab({
     className: "perf-asof"
   }, "Performance as on ", /*#__PURE__*/React.createElement("b", null, asOn)), order.map(b => buckets[b] ? /*#__PURE__*/React.createElement(PerfTable, {
     key: b,
-    rows: buildRows(buckets[b], b === "Debt MF"),
+    rows: buildRows(buckets[b], b === "Debt MF", b === "Debt MF" ? "debt" : b === "PMS" ? "pms" : b === "AIF" ? "aif" : "equity"),
     columns: b === "Debt MF" ? dbCols : b === "PMS" ? pmsCols : b === "AIF" ? aifCols : eqCols,
     headerLabel: b,
     debtMode: b === "Debt MF",
