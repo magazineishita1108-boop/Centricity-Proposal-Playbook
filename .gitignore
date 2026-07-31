@@ -8,14 +8,21 @@ uploads/
 inputs/
 
 # --- Dashboard backups / broken states from local builds ---
+# NOTE: "*.bak" matches only names ENDING in .bak, so the dated snapshots
+# (index.html.bak_directeq_20260728, *.bak2 …) need their own patterns.
+# Without these a plain `git add .` pushes ~250 MB of backups.
 *.bak
-*.bak2
-*.bak3
-*.bak4
-*.bak5
+*.bak_*
+*.bak[0-9]
+*.bak[0-9]*
 *.broken
-*.broken2
+*.broken*
 *.tmp
+
+# --- Local tooling / scratch ---
+.claude/
+node_modules/
+_testdata/
 
 # --- Misc generated artefacts ---
 *.docx
