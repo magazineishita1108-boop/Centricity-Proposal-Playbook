@@ -7,9 +7,13 @@
 // Source returns are in PERCENT units; MASTER stores decimals, so everything is /100.
 // Join key is ISIN (MASTER carries `isin`), falling back to a normalised company name.
 //
-// Update SRC to this month's file, then:
-//   node merge_direct_equity_returns.js            # dry run — prints join stats and gates
-//   node merge_direct_equity_returns.js --apply    # writes index.html
+// Usage:
+//   node merge_direct_equity_returns.js "<returns-workbook.xlsx>"           # dry run
+//   node merge_direct_equity_returns.js "<returns-workbook.xlsx>" --apply   # writes index.html
+//   ... [--html <path to index.html>]   defaults to index.html beside this script
+//
+// The dry run prints the join statistics and the regression gates; always read it before
+// passing --apply.
 //
 // Requires SheetJS: npm install xlsx@0.18.5
 // Back up index.html first. The script refuses to write if the top-10-by-mktcap "Large Cap"
@@ -21,10 +25,28 @@ const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
 
-const APPLY = process.argv.includes('--apply');
-const DIR = "C:\\Users\\IshitaMagazine\\OneDrive - CENTRICITY FINANCIAL DISTRIBUTION PRIVATE LIMITED\\Documents\\Claude\\Projects\\Centricity Proposal Playbook";
-const SRC = "C:\\Users\\IshitaMagazine\\OneDrive - CENTRICITY FINANCIAL DISTRIBUTION PRIVATE LIMITED\\Desktop\\Listed Direct equity_30th June 2026.xlsx";
-const HTML = path.join(DIR, 'index.html');
+const argv = process.argv.slice(2);
+let APPLY = false, SRC = null, HTML = null;
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--apply') { APPLY = true; continue; }
+  if (a === '--html') { HTML = argv[++i] || null; continue; }
+  if (a.startsWith('--')) { console.error(`unknown flag: ${a}`); process.exit(2); }
+  if (SRC === null) SRC = a;
+}
+HTML = HTML || path.join(__dirname, 'index.html');
+
+if (!SRC) {
+  console.error('Usage: node merge_direct_equity_returns.js "<returns-workbook.xlsx>" [--apply] [--html <index.html>]');
+  console.error('  The returns workbook is "Listed Direct equity_<date>.xlsx" — the ~8,400-row one,');
+  console.error('  NOT the sector/mcap file of a similar name in the Analytics folder.');
+  process.exit(2);
+}
+for (const [label, p] of [['returns workbook', SRC], ['index.html', HTML]]) {
+  if (!fs.existsSync(p)) { console.error(`*** ${label} not found: ${p}`); process.exit(2); }
+}
+console.log(`returns workbook: ${SRC}`);
+console.log(`target          : ${HTML}\n`);
 
 // --- data hygiene: NBSP + doubled internal spaces are endemic in these source files ---
 const clean = s => String(s == null ? '' : s)

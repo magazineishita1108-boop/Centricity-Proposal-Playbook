@@ -194,7 +194,14 @@ Adding them is a feature, not a refresh.
    in-file date. Worth having: the 30-Jun workbook's *internal* date is 29 June.
 2. **Direct Equity returns** — `r3m/r6m/r1y/r2y/r3y/r5y` baked onto Direct Equity records, shown
    as pills in the pick list and as a new **"Listed Direct Equity"** bucket in the Performance
-   Sheet (on-screen, Excel and PPT). Re-run `merge_direct_equity_returns.js` each month.
+   Sheet (on-screen, Excel and PPT). Re-run each month (dry run first, always read the gates):
+
+   ```bash
+   node merge_direct_equity_returns.js "<Desktop>/Listed Direct equity_<date>.xlsx"
+   ```
+
+   Add `--apply` to write. `--html <path>` overrides the target; it defaults to `index.html`
+   beside the script. Needs `npm install xlsx@0.18.5`.
 3. **No-holdings funds excluded from analytics** — `H.hasEqHoldings` / `H.hasDbHoldings` gate both
    the chip list and the aggregation. Removed two fallbacks that fabricated data: an equity
    fund-level mcap guess that added exposure but no sectors/stocks (diluting every percentage),
