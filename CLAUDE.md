@@ -96,13 +96,15 @@ Line numbers below are as of 28-Jul-2026 and **drift with every edit** — re-de
 `window.MASTER` is also assigned at L2629, L2829, L2949, L7593–94, L7629–30 — those are **runtime
 uploader / add-fund handlers**, not data blocks. Only L1031 is the baseline.
 
-### Effective in-browser universe (after all five siblings run): **7,460**
+### Effective in-browser universe (after all five siblings run): **7,482**
 
 ```
 Direct Equity 5257 · Mutual Fund 1200 · Index Fund 510 · ETF 249 · Mutual Funds 67
-GIFT City 53 · Bonds 28 · SIF 28 · AIF 26 · PMS 26 · Fixed Deposit 6
+GIFT City 53 · Bonds 50 · SIF 28 · AIF 26 · PMS 26 · Fixed Deposit 6
 Unlisted Equity 5 · Offshore Funds 4 · REIT/InvIT 1
 ```
+
+Bonds split by desk (`sub_category`): **Invictus 36 · OneDigital 14**.
 
 Effective `DATA_DATES`: performance / analytics / pms = `30th June 2026`, `riskMatrix` = `30 Jun 2026`,
 **`sif` = `—` (still unset)**.
@@ -135,7 +137,12 @@ Windows path.
 - Exit-load text cells (`Nil`, `.`, `No Option`, `NA`) mean *missing*, not zero. Only a numeric
   `0.00%` run becomes the word "Nil".
 - Bond maturity dates have a recurring century typo (2030 stored as 1930) — parse the date from the
-  issuer-name string, not the date cell.
+  issuer-name string, not the date cell. (`merge_bond_list.js` does this and reports any
+  name-vs-cell disagreement. The 06-Aug-2026 workbook arrived with the typo already corrected,
+  but an earlier copy of the same file still had it — always re-check.)
+- The Bond List repeats the same bond in two formats within one sheet
+  (`7.7942 L&T FINANCE LIMITED 27JUN2031` and `7.7942% L& T Finance 2031`), and sometimes drops
+  the coupon entirely (`NAVI FINSERV 31.08.2029`). Dedupe on issuer + maturity, not on the name.
 - Reclassifying a fund without checking for an existing same-named record silently creates a
   duplicate. There are currently **0 duplicate names** in the effective MASTER — keep it that way.
 - `sebi_mcap` must be joined **by company name, not row position** (this bug shipped for ~8 months,
@@ -265,7 +272,7 @@ not loaded by anything, and it's the `.bak_regen` copy rather than the current 1
 | PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` | monthly | 30 Jun 2026 |
 | AIF performance + benchmarks | *no recurring source* | frozen | May 2026 |
 | Direct Equity | `Listed Direct Equity_<Month>.xlsx` | monthly | 28 Jul 2026 |
-| Bonds | `Bond List_<date>.xlsx` | periodic | per last list |
+| Bonds | `Bond List_<date>.xlsx` → `merge_bond_list.js` | periodic | Invictus 6 Aug 2026; OneDigital older |
 | GIFT City / Offshore | `Gift City Master List.xlsx` | periodic | Jun 2026 (sibling) |
 | SIF universe + perf | `SIF Master List_<Month Year>.xlsx` | monthly | universe Jul 2026; **perf unset** |
 | Expected IRR | Exit Load & Expected IRR file (**format changed** — verify columns each run) | monthly | — |
