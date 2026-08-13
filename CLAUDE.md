@@ -96,18 +96,19 @@ Line numbers below are as of 28-Jul-2026 and **drift with every edit** — re-de
 `window.MASTER` is also assigned at L2629, L2829, L2949, L7593–94, L7629–30 — those are **runtime
 uploader / add-fund handlers**, not data blocks. Only L1031 is the baseline.
 
-### Effective in-browser universe (after all five siblings run): **7,482**
+### Effective in-browser universe (after all five siblings run): **7,603**
 
-```
-Direct Equity 5257 · Mutual Fund 1200 · Index Fund 510 · ETF 249 · Mutual Funds 67
-GIFT City 53 · Bonds 50 · SIF 28 · AIF 26 · PMS 26 · Fixed Deposit 6
-Unlisted Equity 5 · Offshore Funds 4 · REIT/InvIT 1
-```
+Direct Equity 5,353 · Bonds 50 (Invictus 36 · OneDigital 14) · SIF 28 · the rest as before.
 
-Bonds split by desk (`sub_category`): **Invictus 36 · OneDigital 14**.
+`EQUITY_ANALYTICS` 1,152 · `HYBRID_ANALYTICS` 246 · `DEBT_ANALYTICS` 495 · `DIRECT_PERF` 1,676 ·
+`MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
 
-Effective `DATA_DATES`: performance / analytics / pms = `30th June 2026`, `riskMatrix` = `30 Jun 2026`,
-**`sif` = `—` (still unset)**.
+Effective `DATA_DATES`: performance / analytics = `31st July 2026`, pms = `30th June 2026`,
+`riskMatrix` = `30 Jun 2026`, **`sif` = `—` (still unset)**.
+
+**`Centricity_June_Refresh.js` used to stamp `DATA_DATES.analytics = "30th June 2026"` on every
+page load**, silently reverting any later analytics bake. Removed 13-Aug-2026. If an as-on date
+ever refuses to stick, check the siblings before the embedded block.
 
 ---
 
@@ -189,10 +190,21 @@ Rahul drops these each cycle. June 2026 set lives at:
 `Analytics\` carries sector / industry / market cap / ISIN (~5,300 rows). The one at the Desktop
 root carries the price returns (~8,400 rows) and nothing else. Only the second one feeds returns.
 
-**Not wired to anything yet** — no field exists in `MASTER` for these:
-`AMFI CODE.xlsx`, `Expense Ratio_<Month>.xlsx`, `Fund Manager_MF_<Month>.xlsx`.
-("Fund Manager" appears only as free text inside `CENTRICITY_SELECT` Reckoner rationales.)
-Adding them is a feature, not a refresh.
+**Expense ratio and exit load ARE wired** (corrected 13-Aug-2026 — an earlier note here said they
+weren't). `MASTER.expense` and `MASTER.exit_load` both exist and are ~99% populated. Refresh with:
+
+```bash
+node merge_expense_exitload.js --expense "<Expense ratio_<Month>.xlsx>" --exitload "<Exit Load_MF_<Month>.xlsx>"
+```
+
+The expense workbook's **`Ratio`** column is the total TER that `expense` holds (verified against
+the embedded value). The **Regular row also carries `Direct Plan Ratio`**, so one row feeds both
+plans — `MASTER.expense` and `DIRECT_PERF[].expense`. Sanity bound is 8%, not the usual 2.25% MF
+cap: SIF / long-short schemes in this universe genuinely run 4–6%+.
+
+**Not wired to anything yet** — no field exists in `MASTER`: `AMFI CODE.xlsx`,
+`Fund Manager_MF_<Month>.xlsx` ("Fund Manager" appears only as free text inside
+`CENTRICITY_SELECT` Reckoner rationales). Adding them is a feature, not a refresh.
 
 ### Changes shipped 31-Jul-2026
 
@@ -258,6 +270,53 @@ before pushing.
 
 Also on the repo but harmless: `Centricity_Risk_Matrix.js` (157,454 bytes) — the build artifact,
 not loaded by anything, and it's the `.bak_regen` copy rather than the current 156,775-byte one.
+
+---
+
+## The monthly bake
+
+`bake_month.js` runs **index.html's own parsers** (`REFRESH.parseAnalytics`, `parseMfMonitor`) over
+the month's workbooks inside a Node `vm` sandbox, then writes the resulting globals back into the
+embedded blocks — so a bake produces exactly what the Section 7 uploader would.
+
+```bash
+node bake_month.js --dir "<Month folder>" --as-on "31st July 2026"          # dry run
+node bake_month.js --dir "<Month folder>" --as-on "31st July 2026" --apply
+node merge_de_universe.js "<Analytics/Listed Direct Equity_<Month>.xlsx>" --apply
+node merge_direct_equity_returns.js "<Listed Direct Equity Returns_<date>.xlsx>" --apply
+node merge_expense_exitload.js --expense "<...>" --exitload "<...>" --apply
+```
+
+**It deliberately does not execute the five siblings.** They mutate `MASTER` on every page load, so
+the baseline block must stay pre-sibling — otherwise their edits get baked in *and* re-applied.
+
+Two things to know:
+
+- **`parseAnalytics` MERGES, it does not replace.** A scheme in last month's block but absent from
+  this month's workbook keeps its old holdings under the new date. Always run the variant fill
+  below afterwards, then chase whatever is still missing upstream.
+
+**Always follow a bake with `fill_variant_analytics.js`:**
+
+```bash
+node fill_variant_analytics.js --dir "<Month folder>" --apply
+```
+
+A fund missing from the workbook under its Growth name is usually **present under another option
+of the same scheme** — `SBI Contra Fund-Reg(G)` is absent but `SBI Contra Fund-Reg(IDCW)` is there.
+Options of one scheme share a single portfolio, so the sibling row is a valid source. The July run
+recovered **29 equity + 3 debt** funds this way (SBI Contra, DSP Flexi Cap, Aditya Birla SL ELSS,
+SBI ELSS, the whole SBI/UTI sector-fund block…), all of which would otherwise have carried June
+holdings under a July label.
+
+It parses the month's file into an empty store first, so it can tell "this month covers it under
+another name" from "this month does not cover it at all", and it prefers a Growth/Regular sibling
+when several options exist. What remains unmatched is mostly FoFs (resolved via their underlying
+anyway), direct-only AMCs (JioBlackRock, Zerodha) and Quantum unclaimed plans — all legitimately
+absent from an MF holdings workbook.
+- **`DIRECT_PERF` is rebuilt, not merged**, so a fund absent from this month's Direct monitor loses
+  its overlay and falls back to Regular values. July dropped 29 (mostly SIF long-short and GIFT
+  City feeders that arguably should never have had MF Direct data).
 
 ---
 
