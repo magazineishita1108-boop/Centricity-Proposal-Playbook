@@ -1160,11 +1160,38 @@ window.linkIdcwToGrowth();
     if (/GOI|G-Sec|Government of India/i.test(s)) return "Government of India";
     if (/TREPS|Tri-Party Repo/i.test(s)) return "Tri-Party Repo (TREPS)";
     if (/Clearing Corporation/i.test(s)) return "Clearing Corporation of India Ltd.";
-    s = s.replace(/^\d+(\.\d+)?%?\s+/, "");
-    s = s.replace(/\s+\d{1,2}[-/]?[A-Z]{3}[-/]?\d{4}\b/, "");
-    s = s.replace(/\(\d{1,2}-[A-Za-z]{3}-\d{4}\)/, "");
-    s = s.replace(/\s+(PERP|CALL|SR\s+\w+)\b/gi, "");
-    s = s.replace(/\([^)]*$/, "").replace(/\)$/, "").trim();
+    // The source names every treasury bill separately ("91 Days Treasury Bill - 06-Aug-2026"),
+    // which otherwise puts one row per maturity in the issuer table — and the leading-coupon
+    // strip below would eat the "91", leaving "Days Treasury Bill - …".
+    if (/treasury\s*bill|\bT-?bills?\b|\bDTB\b/i.test(s)) return "Treasury Bills";
+    if (/net\s*current\s*asset/i.test(s)) return "Net Current Asset";
+    // State Development Loans are listed one row per state AND maturity (646 distinct strings in
+    // the July data). Collapse to the issuing state, which is the actual issuer.
+    const sdl = s.match(/^\s*(?:\d+(?:\.\d+)?\s*%?\s*)?(.+?)\s+SDL\b/i);
+    if (sdl) return sdl[1].replace(/\s+/g, " ").trim() + " SDL";
+
+    s = s.replace(/^\d+(\.\d+)?%?\s+/, "");                      // leading coupon: "7.85% X"
+    // Strip instrument detail off the tail. The analytics source appends coupon, series and
+    // maturity AFTER the issuer ("Muthoot Finance Ltd. 7.85%", "… OP I 08.52%", "… -362D",
+    // "… -SR-XXV 07.35%"), where the leading strip above never sees them — one issuer then
+    // fragments into a row per instrument. Looped because the parts arrive in any order, and
+    // the parenthetical goes first: truncated dates ("(13-Dec-28", "(06-Febr-2030") leave an
+    // unclosed bracket that would otherwise shield the coupon behind it.
+    for (let i = 0; i < 4; i++) {
+      const before = s;
+      s = s.replace(/\s*\([^)]*\)?\s*$/, "");                    // trailing (…) even if unclosed
+      s = s.replace(/\s+\d{1,2}[-/]?[A-Za-z]{3,4}[-/]?\d{2,4}\b\.?/g, "");
+      s = s.replace(/\s*[-–—]?\s*\bSR[-.\s]?\s?[A-Za-z0-9]+\b/g, "");
+      s = s.replace(/\s*[-–—]?\s*\bTR[-\s]?\d+\b/g, "");
+      s = s.replace(/\s*\bOP\s+[IVX]+\b/g, "");
+      s = s.replace(/\s*[-–—]?\s*\d+(\.\d+)?\s*%/g, "");         // coupon anywhere on the tail
+      s = s.replace(/\s*[-–—]\s*\d+\s*D\b/gi, "");               // "-362D"
+      s = s.replace(/\s+(PERP|CALL|BD)\b/gi, "");
+      s = s.trim();
+      if (s === before) break;
+    }
+    // Trailing separators only — never the full stop, which belongs to "Ltd.".
+    s = s.replace(/[\s\-–—,]+$/, "").trim();
     if (s === s.toUpperCase() && /[A-Z]/.test(s)) {
       s = s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/\bLtd\b/, "Ltd").replace(/\bLimited\b/, "Limited");
     }

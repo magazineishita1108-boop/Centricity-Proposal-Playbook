@@ -131,6 +131,16 @@ Windows path.
 
 ### Data-hygiene traps on every refresh
 
+- **Issuer names carry the instrument, not just the issuer**, and the layout changed with the
+  July file. `H.parseIssuer` collapses them for the Top Issuers table; it must strip coupon,
+  series and maturity from **both ends** — the older files wrote `7.85% Muthoot Finance Ltd.`,
+  July writes `Muthoot Finance Ltd. 7.85%`, `… OP I 08.52%`, `… -362D`, `… -SR-XXV 07.35%`.
+  Miss the trailing form and one issuer fragments into a row per instrument. Special cases that
+  must stay: Treasury Bills (one row per maturity, and the leading `91`/`182`/`364` looks exactly
+  like a coupon), State Development Loans (646 raw strings → 34, one per state), TREPS, GOI,
+  Net Current Asset. Truncated dates in the source (`(13-Dec-28`, `(06-Febr-2030`) leave an
+  unclosed bracket, so strip the trailing parenthetical *before* the coupon.
+  Whole-universe check: **2,617 raw issuer strings → 555 distinct**, none retaining a `%`.
 - Non-breaking spaces and doubled internal spaces in security / sector / scheme names (seen in
   Direct Equity and PMS sources) — normalise before matching or you get large numbers of fake
   adds and fake changes. Trailing spaces exist in live data (`"Kotak Optimus Fund (Moderate 50:50) "`).
