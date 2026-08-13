@@ -175,6 +175,36 @@ clean. Needs internet for the five CDN libraries.
 
 ---
 
+## Refreshing the Market Update slides
+
+The deck's slides are native PowerPoint shapes — **there are no embedded images to extract**
+(`ppt/media/` is empty). They have to be *rendered*. PowerPoint COM does it faithfully; there is
+no LibreOffice on this machine.
+
+```powershell
+$app  = New-Object -ComObject PowerPoint.Application
+$pres = $app.Presentations.Open($src, -1, 0, 0)          # ReadOnly, no window
+1..$pres.Slides.Count | % { $pres.Slides.Item($_).Export("slide$_.jpg", "JPG", 2001, 1125) }
+$pres.Close(); $app.Quit()
+```
+
+```bash
+node update_market_slides.js --slides "<dir of slide1..5.jpg>" --apply
+```
+
+- **2001 × 1125** — every image in `EXTRA_SLIDES` is this size; the tool gates on it.
+- PowerPoint's own JPEG quality is heavy (1,743 KB for 5 slides in August). Re-encoding at
+  quality 82 via `System.Drawing` gives 1,284 KB with no visible loss on chart text. Always eyeball
+  the densest slide after re-encoding — it is a second lossy pass.
+- Only `market` is replaced. `marketDivider`, `portfolioDivider`, `annexureDivider` and
+  `thankyou` are separate keys and must survive; the tool prints them as a gate.
+- Verify by decoding all 9 images in the browser (`new Image()` per data URI), not by file size.
+
+The source deck was renamed from `Monthly Outlook Pagers- <Month Year>.pptx` to
+`Market Update Slide_<Month Year>.pptx` with the August 2026 edition.
+
+---
+
 ## Monthly source files
 
 Rahul drops these each cycle. June 2026 set lives at:
@@ -194,7 +224,7 @@ Rahul drops these each cycle. June 2026 set lives at:
 | `3Y Rolling + Risk Ratios - MF (as on <date>).xlsx` | spot-check reference for the above |
 | `SIF Master List_<Month Year>.xlsx` | `Centricity_SIF_Refresh.js` |
 | `Exit Load_MF_<Month>.xlsx` | exit-load text (2-col Name→Remark since Jul-2026) |
-| `Monthly Outlook Pagers- <Month Year>.pptx` | `EXTRA_SLIDES.market` |
+| `Market Update Slide_<Month Year>.pptx` | `EXTRA_SLIDES.market` → `update_market_slides.js` |
 
 **Two files share the "Listed Direct Equity" name and are not interchangeable.** The one in
 `Analytics\` carries sector / industry / market cap / ISIN (~5,300 rows). The one at the Desktop
@@ -371,7 +401,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | SIF universe + perf | `SIF Master List_<Month Year>.xlsx` | monthly | universe Jul 2026; **perf unset** |
 | Expected IRR | Exit Load & Expected IRR file (**format changed** — verify columns each run) | monthly | — |
 | Portfolio Matrix | `NAV Data as on <date>.xlsx` | monthly | 30 Jun 2026 (1,088 funds) |
-| Monthly Outlook Pagers | `Monthly Outlook Pagers- <Month Year>.pptx` | monthly | July 2026 (5 slides) |
+| Market Update slides | `Market Update Slide_<Month Year>.pptx` | monthly | August 2026 (5 slides) |
 | Centricity Select | `Monthly Investment Reckoner - <Month>.pptx` | monthly | Jun 2026 |
 
 **Procedure for any refresh:**
