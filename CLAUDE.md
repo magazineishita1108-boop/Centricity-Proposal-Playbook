@@ -318,6 +318,31 @@ absent from an MF holdings workbook.
   its overlay and falls back to Regular values. July dropped 29 (mostly SIF long-short and GIFT
   City feeders that arguably should never have had MF Direct data).
 
+### `DIRECT_PERF` must sit on MASTER's scale
+
+`H.toDirect` substitutes these fields wholesale, so a scale mismatch shows up directly in the
+client-facing Performance Sheet — a 39% m-cap slice rendered as **3935%**. Match `parseMfMonitor`
+exactly:
+
+| Field | Source column | Scale |
+|---|---|---|
+| returns, `ytm` | `MTD`…`SINCE INCEPTION`, `YTM (%)` | `pctToDec` (÷100) |
+| `mcap_large/mid/small/other` | `Large Cap`, `Mid Cap`, `Small Cap`, **`Others`** | `mcapDec` (÷100) |
+| `expense` | **`Ratio`** | `pctToDec` (÷100) |
+| `aum`, `avg_maturity`, `mod_duration` | `AUM (Cr.)`, `Average Maturity Years`, `Modified Duration Years` | **raw** |
+
+Header spellings differ from what you'd guess — it is `YTM (%)` not `YTM`, `Average Maturity Years`
+not `Average Maturity`, and the expense ratio lives in a column called `Ratio`. Getting a name
+wrong fails silently: the field is simply never set and the Direct view quietly shows Regular data.
+
+**The four m-cap buckets are one split — take them atomically**, treating a blank cell as zero.
+Merging a partial Direct split onto the Regular one produced a set summing to 108%. Equity-style
+sheets carry the m-cap columns, pure debt sheets carry the debt stats, and hybrid sheets carry both
+but must be treated as equity so the two plans agree.
+
+Regular and Direct hold the *same portfolio*, so a correct m-cap split is identical across plans —
+if the two differ, the scale or the merge is wrong. Only returns, TER and AUM should differ.
+
 ---
 
 ## Refresh workflows

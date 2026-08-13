@@ -214,9 +214,16 @@ function buildDirectPerf(src, W) {
   const NUM = [['mtd', 'MTD'], ['r1m', '1 Month'], ['r3m', '3 Months'], ['r6m', '6 Months'],
     ['r1y', '1 Year'], ['r2y', '2 Years'], ['r3y', '3 Years'], ['r5y', '5 Years'],
     ['r10y', '10 Years'], ['si', 'SINCE INCEPTION']];
-  const PLAIN = [['aum', 'AUM (Cr.)'], ['expense', 'Expense Ratio'],
-    ['mcap_large', 'Large Cap'], ['mcap_mid', 'Mid Cap'], ['mcap_small', 'Small Cap'],
-    ['ytm', 'YTM'], ['avg_maturity', 'Average Maturity'], ['mod_duration', 'Modified Duration']];
+  // Scales MUST match what parseMfMonitor writes onto MASTER, or the Regular/Direct toggle swaps
+  // a decimal for a percentage (a 39% m-cap slice rendering as 3935%). Percentage columns are
+  // divided by 100; AUM and the maturity figures are raw.  NOTE the exact header spellings —
+  // the Direct workbook says "YTM (%)", "Average Maturity Years", "Modified Duration Years" and
+  // carries the expense ratio in a column called "Ratio".
+  const PCT_COLS = [['mcap_large', 'Large Cap'], ['mcap_mid', 'Mid Cap'],
+    ['mcap_small', 'Small Cap'], ['mcap_other', 'Others'], ['expense', 'Ratio'],
+    ['ytm', 'YTM (%)']];
+  const RAW_COLS = [['aum', 'AUM (Cr.)'],
+    ['avg_maturity', 'Average Maturity Years'], ['mod_duration', 'Modified Duration Years']];
   // "X Fund(G)-Direct Plan", "X Fund(G)-Direct Plan(Adjusted)" and "X Fund-Reg(G)" must all
   // reduce to the same base. "(Adjusted)" marks a restated series, not a different scheme.
   const NBSP = String.fromCharCode(160);
@@ -263,7 +270,29 @@ function buildDirectPerf(src, W) {
       if (!reg) { unmatched++; if (sampleUnmatched.length < 12) sampleUnmatched.push(nm); continue; }
       const rec = out[reg] || (out[reg] = {});
       for (const [k, h] of NUM) { const i = heads.indexOf(h); if (i >= 0) { const v = pct(cell(ws, r, i)); if (v != null) rec[k] = v; } }
-      for (const [k, h] of PLAIN) { const i = heads.indexOf(h); if (i >= 0) { const v = num(cell(ws, r, i)); if (v != null) rec[k] = v; } }
+      // Only take the m-cap split on equity-style sheets and the debt stats on pure debt sheets,
+      // matching parseMfMonitor — hybrid sheets carry both column sets but are treated as equity
+      // there, and the two plans must agree.
+      const isEquityStyle = heads.indexOf('Large Cap') >= 0;
+      for (const [k, h] of PCT_COLS) {
+        if (/^mcap_/.test(k)) continue;                 // handled atomically below
+        if (k === 'ytm' && isEquityStyle) continue;
+        const i = heads.indexOf(h); if (i < 0) continue;
+        const v = pct(cell(ws, r, i)); if (v != null) rec[k] = v;
+      }
+      // The four m-cap buckets are one split: take them together, treating a blank as zero.
+      // Merging a partial Direct split onto the Regular one produced a set summing to 108%.
+      if (isEquityStyle) {
+        const q = [['mcap_large', 'Large Cap'], ['mcap_mid', 'Mid Cap'],
+                   ['mcap_small', 'Small Cap'], ['mcap_other', 'Others']]
+          .map(([k, h]) => { const i = heads.indexOf(h); return [k, i >= 0 ? pct(cell(ws, r, i)) : null]; });
+        if (q.some(([, v]) => v != null)) for (const [k, v] of q) rec[k] = (v == null ? 0 : v);
+      }
+      for (const [k, h] of RAW_COLS) {
+        if (/^(avg_maturity|mod_duration)$/.test(k) && isEquityStyle) continue;
+        const i = heads.indexOf(h); if (i < 0) continue;
+        const v = num(cell(ws, r, i)); if (v != null) rec[k] = v;
+      }
       matched++;
     }
   }
