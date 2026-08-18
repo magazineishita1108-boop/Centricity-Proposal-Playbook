@@ -2021,15 +2021,21 @@ window.linkIdcwToGrowth();
     if (plan !== 'Direct') return selected;
     return selected.map(function(s){ return Object.assign({}, s, { fund: H.toDirect(s.fund) }); });
   };
-  // Apply per-fund IRR-range overrides (entry.irrLow / entry.irrHigh, decimals) onto a fund
+  // Apply per-fund overrides — IRR range (entry.irrLow / entry.irrHigh) and past returns
+  // (entry.r1yOv / r3yOv / r5yOv), all decimals — onto a fund
   // clone so every downstream consumer (weighted totals, KPIs, future value, proposal, exports)
   // uses the user-edited IRR. Entries without an override pass through unchanged.
   H.applyOverrides = function(selected) {
     return selected.map(function(s){
-      if (s.irrLow == null && s.irrHigh == null) return s;
+      var hasIrr = (s.irrLow != null || s.irrHigh != null);
+      var hasRet = (s.r1yOv != null || s.r3yOv != null || s.r5yOv != null);
+      if (!hasIrr && !hasRet) return s;
       var f = Object.assign({}, s.fund);
       if (s.irrLow != null) f.irr_low = s.irrLow;
       if (s.irrHigh != null) f.irr_high = s.irrHigh;
+      if (s.r1yOv != null) f.r1y = s.r1yOv;
+      if (s.r3yOv != null) f.r3y = s.r3yOv;
+      if (s.r5yOv != null) f.r5y = s.r5yOv;
       return Object.assign({}, s, { fund: f });
     });
   };
@@ -5655,6 +5661,18 @@ function SelectedTable({
       return n;
     });
   };
+  // Override a past return (field: 'r1yOv' | 'r3yOv' | 'r5yOv', v: decimal) for one row.
+  // Stored on the selection entry, not on the shared MASTER record, so the edit belongs to
+  // this proposal only and never leaks into another user's session or the base data.
+  const setRet = (i, field, v) => {
+    setSelected(arr => {
+      const n = arr.slice();
+      n[i] = Object.assign({}, n[i], {
+        [field]: v
+      });
+      return n;
+    });
+  };
   const remove = i => setSelected(arr => arr.filter((_, idx) => idx !== i));
   const amtLabel = corpusUnit === 'Lakhs' ? 'Amount (₹ L)' : 'Amount (₹ Cr)';
   const showAmt = cr => corpusUnit === 'Lakhs' ? (cr * 100).toFixed(2) : cr.toFixed(2);
@@ -5773,19 +5791,28 @@ function SelectedTable({
       },
       className: (H.effectiveReturn(s.fund, 'r1y') || 0) < 0 ? "neg" : "",
       title: H.isFallbackReturn(s.fund, 'r1y') ? "IRR mid-point (no past return)" : ""
-    }, H.fmtPct(H.effectiveReturn(s.fund, 'r1y'))), /*#__PURE__*/React.createElement("td", {
+    }, /*#__PURE__*/React.createElement(PctInput, {
+      value: H.effectiveReturn(s.fund, 'r1y'),
+      onCommit: v => setRet(i, 'r1yOv', v)
+    })), /*#__PURE__*/React.createElement("td", {
       style: {
         textAlign: "center"
       },
       className: (H.effectiveReturn(s.fund, 'r3y') || 0) < 0 ? "neg" : "",
       title: H.isFallbackReturn(s.fund, 'r3y') ? "IRR mid-point (no past return)" : ""
-    }, H.fmtPct(H.effectiveReturn(s.fund, 'r3y'))), /*#__PURE__*/React.createElement("td", {
+    }, /*#__PURE__*/React.createElement(PctInput, {
+      value: H.effectiveReturn(s.fund, 'r3y'),
+      onCommit: v => setRet(i, 'r3yOv', v)
+    })), /*#__PURE__*/React.createElement("td", {
       style: {
         textAlign: "center"
       },
       className: (H.effectiveReturn(s.fund, 'r5y') || 0) < 0 ? "neg" : "",
       title: H.isFallbackReturn(s.fund, 'r5y') ? "IRR mid-point (no past return)" : ""
-    }, H.fmtPct(H.effectiveReturn(s.fund, 'r5y'))), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("button", {
+    }, /*#__PURE__*/React.createElement(PctInput, {
+      value: H.effectiveReturn(s.fund, 'r5y'),
+      onCommit: v => setRet(i, 'r5yOv', v)
+    })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("button", {
       className: "icon-btn",
       title: "Switch to similar instrument",
       onClick: () => setSwitchTarget({
@@ -7970,7 +7997,7 @@ function App() {
   // Plan-adjusted views. `selected`/`master` always hold the canonical Regular fund objects
   // (so edits, switches and adds stay correct); the Direct overlay is applied only for
   // display and computation downstream.
-  const planSelected = useM3(() => H.applyPlanSelected(H.applyOverrides(selected), planMode), [selected, planMode, dataVer]);
+  const planSelected = useM3(() => H.applyOverrides(H.applyPlanSelected(selected, planMode)), [selected, planMode, dataVer]);
   const planMaster = useM3(() => planMode === 'Direct' ? master.map(f => H.toDirect(f)) : master, [master, planMode, dataVer]);
   const kpis = useM3(() => H.computeKPIs(planSelected, corpus), [planSelected, corpus]);
   const addFund = f => {

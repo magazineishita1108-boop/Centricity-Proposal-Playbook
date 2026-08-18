@@ -270,6 +270,15 @@ cap: SIF / long-short schemes in this universe genuinely run 4–6%+.
    download bar. Five columns only (Asset Class, Product Class, Instrument Name, % Total,
    Amount (Cr.)). The reader takes any column order, derives % from Amount when there's no %
    column, rescales 0–1 fractions (Excel percent formatting) and reports unmatched names.
+6. **Editable past returns** — 1Y / 3Y / 5Y in Section 4 are `PctInput`s like the IRR range,
+   stored as `r1yOv` / `r3yOv` / `r5yOv` on the *selection entry*, never on the shared MASTER
+   record, so an edit belongs to one proposal and cannot leak into the base data.
+
+   **`H.applyOverrides` must run AFTER `H.applyPlanSelected`** (see the `planSelected` memo).
+   `H.toDirect` substitutes `r1y/r3y/r5y` wholesale, so with the old order flipping to Direct
+   silently discarded a hand-edited return. An explicit edit outranks the plan overlay.
+   IRR overrides were unaffected either way — `toDirect` does not touch `irr_low/irr_high`.
+
 5. **Closest-name matching on re-upload** — `H.resolveFundName(name, H.buildFundIndex(master))`,
    tiered: exact → case/space-normalised → **plan-suffix stripped** → unique prefix → token
    similarity. Hand-typed names usually omit the plan suffix ("ICICI Pru Equity Savings Fund"
