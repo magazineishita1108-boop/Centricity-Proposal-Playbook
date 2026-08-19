@@ -112,6 +112,43 @@ ever refuses to stick, check the siblings before the embedded block.
 
 ---
 
+## Layout (13-Aug-2026)
+
+Three-column workspace inside `.layout`: a collapsible **left rail** holding Section 7 Data
+Refresh, `main.col-main` with sections 1-6 plus the Master Editor, and a right-hand
+**`SectionNav`** jump list. `SectionCard` emits `id="sec-<num>"`; the Master Editor shell is
+`sec-master`. The nav is navigation only — it renders no proposal data.
+
+- The two in-flow Section 7 cards are still in the App tree but guarded by `false &&`. The panel
+  itself is rendered once, inside the rail. Delete the dead branches only after confirming the
+  rail covers both the live and the shared/frozen case.
+- **Nav scrolling is animated by hand, not `behavior:"smooth"`.** Chrome ignores the smooth flag
+  on a hidden or throttled page, and a hidden page also gets zero `requestAnimationFrame`
+  callbacks — the link would then do nothing at all. There is a `document.hidden` short-circuit
+  and a `setTimeout` safety net that lands on the target if frames never arrive. The Browser
+  pane in this harness reports `visibilityState: "hidden"`, so it exercises exactly that path;
+  do not "simplify" it back to `scrollIntoView({behavior:"smooth"})`.
+- Scroll target clears the sticky header by measuring `.app-header` at click time rather than
+  trusting a fixed `scroll-margin-top`.
+- The skin is a liquid-glass layer appended at the end of the stylesheet: ambient wash on
+  `body::before`, grain on `body::after`, `backdrop-filter` on cards, rails and KPI tiles.
+  **No palette token changed** — the glass tints are alpha mixes of `--gold`/`--gold-deep`/`--tan`.
+  `backdrop-filter` needs something behind it, which is why the ambient wash exists.
+- **Collapsing the rail drops the grid to TWO tracks.** The rail becomes `position:fixed` (a slim
+  re-open tab on the viewport edge), which takes it out of the grid flow — leaving three tracks
+  would place `<main>` into the now-zero-width first one and the content column measures 0.
+  `.layout.left-collapsed` therefore sets `grid-template-columns: minmax(0,1fr) var(--nav-w)`.
+- **`.tab` must not carry `margin-bottom:-2px`.** The Live Output strip wraps to two rows in a
+  narrow column, and the negative margin pulled the second row up into the first — the tabs
+  literally overlapped. Verify with a rect-intersection sweep over `.tabs`, `.kpi-row`,
+  `thead tr` and `.dl-bar`, not by eye.
+- Content column: ~1,120px with the rail open at 1680px wide, ~1,430px (85% of viewport) with it
+  closed — at which point the tab strip fits on one row and the Master table stops scrolling.
+- Do not put `overflow:hidden` on `.section-card`: the Centricity Select and Switch popovers
+  overflow their card by design.
+- Fixed while here: the stylesheet used to end on a truncated `.shared-ba` selector.
+
+---
 ## Traps
 
 **`product_class: "Mutual Funds"` (plural) is deliberate — do not "fix" it.** All 67 such records are

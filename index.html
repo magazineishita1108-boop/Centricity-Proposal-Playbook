@@ -824,7 +824,386 @@ table.atable td.num,
   color: #fff; font-size: 12px; line-height: 1.45;
   border-bottom: 2px solid var(--gold-deep);
 }
-.shared-ba</style>
+
+/* ============================================================================
+   Liquid-glass surface + three-column workspace.
+   Purely presentational: no palette token is changed and no markup that carries
+   data is touched. The ambient wash below exists so the frosted panels have
+   something to refract; it is mixed only from --gold / --gold-deep / --tan.
+   ========================================================================== */
+:root{
+  --glass-bg: rgba(255,255,255,.58);
+  --glass-bg-strong: rgba(255,255,255,.74);
+  --glass-brd: rgba(255,255,255,.65);
+  --glass-shadow: 0 10px 34px rgba(92,62,23,.10), 0 2px 8px rgba(92,62,23,.05);
+  --glass-inset: inset 0 1px 0 rgba(255,255,255,.80);
+  --rail-w: 320px;
+  --nav-w: 216px;
+}
+body{ background: #FCFAF7; }
+body::before{
+  content:""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(58% 44% at 10% 6%,  rgba(189,149,104,.22), transparent 62%),
+    radial-gradient(52% 40% at 90% 2%,  rgba(219,200,178,.34), transparent 64%),
+    radial-gradient(58% 48% at 82% 96%, rgba(157,121,72,.16),  transparent 62%),
+    radial-gradient(46% 38% at 4% 88%,  rgba(219,200,178,.30), transparent 60%),
+    linear-gradient(180deg,#FFFFFF 0%, #FAF6F0 100%);
+}
+/* faint grain so the large flat areas do not band */
+body::after{
+  content:""; position: fixed; inset:0; z-index:-1; pointer-events:none; opacity:.35;
+  background-image: radial-gradient(rgba(157,121,72,.05) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+.app{ background: transparent; }
+
+/* --- workspace grid --- */
+.layout{
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0,1fr) var(--nav-w);
+  gap: 18px;
+  align-items: start;
+  padding: 18px 24px 8px 24px;
+}
+.layout.left-collapsed{ --rail-w: 46px; }
+.col-main{ min-width: 0; display: flex; flex-direction: column; }
+.col-main .section-shell{ padding: 0; }
+.col-main .section-shell + .section-shell{ padding-top: 0; }
+
+/* --- glass cards --- */
+.section-card{
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--glass-brd);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+  margin-bottom: 18px;
+  transition: box-shadow .25s ease;
+}
+.section-card:hover{ box-shadow: 0 14px 42px rgba(92,62,23,.13), var(--glass-inset); }
+.section-head{
+  background: linear-gradient(100deg, rgba(0,0,0,.93) 0%, rgba(0,0,0,.80) 55%, rgba(157,121,72,.72) 100%);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  border-radius: 15px 15px 0 0;
+  border-bottom: 1px solid rgba(255,255,255,.16);
+}
+.section-head .num{ border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,.28); }
+.section-body{ background: transparent; }
+
+/* --- left rail: data refresh --- */
+.side-left{ position: sticky; top: 14px; align-self: start; }
+.side-rail{
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid var(--glass-brd);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+  overflow: hidden;
+  max-height: calc(100vh - 100px);
+  display: flex; flex-direction: column;
+}
+.side-rail-head{
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; flex-shrink: 0;
+  background: linear-gradient(100deg, rgba(0,0,0,.92), rgba(157,121,72,.70));
+  color: #fff;
+}
+.side-rail-head .t{
+  font-weight: 700; text-transform: uppercase; font-size: 12.5px; letter-spacing: .08em;
+  white-space: nowrap; overflow: hidden;
+}
+.side-toggle{
+  margin-left: auto; flex-shrink: 0;
+  width: 24px; height: 24px; line-height: 1; padding: 0;
+  border: 1px solid rgba(255,255,255,.42);
+  background: rgba(255,255,255,.14);
+  color: #fff; border-radius: 7px; font-size: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .2s ease;
+}
+.side-toggle:hover{ background: rgba(255,255,255,.28); }
+.side-rail-body{ padding: 10px; overflow: auto; }
+.side-rail-body .refresh-grid{ display: grid; grid-template-columns: 1fr; gap: 12px; }
+.side-rail-body .refresh-card{
+  background: rgba(255,255,255,.62);
+  border: 1px solid var(--glass-brd);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+}
+.layout.left-collapsed .side-rail-head .t,
+.layout.left-collapsed .side-rail-body{ display: none; }
+.layout.left-collapsed .side-rail-head{ padding: 10px 9px; }
+.layout.left-collapsed .side-toggle{ margin-left: 0; }
+
+/* --- right rail: section navigator --- */
+.side-right{ position: sticky; top: 14px; align-self: start; }
+.nav-glass{
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid var(--glass-brd);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+  padding: 12px 10px;
+}
+.nav-glass .cap{
+  font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--gold-deep); padding: 0 6px 8px 6px;
+}
+.nav-link{
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 8px; margin-bottom: 2px;
+  border-radius: 10px; cursor: pointer;
+  border: 1px solid transparent; background: transparent;
+  width: 100%; text-align: left;
+  font-family: Cambria, Georgia, serif; font-size: 12.5px; color: var(--ink-soft);
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+.nav-link .dot{
+  width: 20px; height: 20px; flex-shrink: 0; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  background: rgba(189,149,104,.20); color: var(--gold-deep);
+  border: 1px solid rgba(189,149,104,.34);
+}
+.nav-link:hover{ background: rgba(189,149,104,.13); border-color: rgba(189,149,104,.30); }
+.nav-link.on{
+  background: rgba(189,149,104,.20);
+  border-color: rgba(189,149,104,.48);
+  color: var(--black); font-weight: 700;
+}
+.nav-link.on .dot{ background: var(--gold); color: var(--black); border-color: var(--gold-deep); }
+
+/* a jumped-to section must clear the sticky header */
+.section-shell{ scroll-margin-top: 90px; }
+
+/* --- collapsible Add Fund --- */
+.addfund-glass{
+  border: 1px solid rgba(189,149,104,.55);
+  background: linear-gradient(180deg, rgba(255,248,225,.72), rgba(255,255,255,.52));
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  border-radius: 14px;
+  box-shadow: var(--glass-inset);
+  margin-top: 14px;
+  overflow: hidden;
+}
+.addfund-bar{
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 11px 14px;
+  background: transparent; border: 0; text-align: left;
+  font-family: Cambria, Georgia, serif;
+  font-size: 13px; font-weight: 700; color: var(--black);
+  transition: background .18s ease;
+}
+.addfund-bar:hover{ background: rgba(189,149,104,.10); }
+.addfund-bar .chev{
+  margin-left: auto; color: var(--gold-deep); font-size: 12px;
+  transition: transform .22s ease;
+}
+.addfund-bar.open .chev{ transform: rotate(180deg); }
+.addfund-bar .tag{
+  font-weight: 400; font-style: italic; font-size: 11.5px; color: var(--brown-text);
+}
+.addfund-panel{ padding: 0 14px 14px 14px; }
+
+/* --- glassy chrome, palette untouched --- */
+.tabs{ background: rgba(255,255,255,.42); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.tab-band{ background: rgba(255,255,255,.50); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.kpi{
+  background: rgba(255,255,255,.56);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--glass-brd);
+  border-radius: 12px;
+  box-shadow: var(--glass-inset);
+}
+.app-header{
+  background: linear-gradient(100deg, rgba(0,0,0,.95) 0%, rgba(0,0,0,.86) 60%, rgba(157,121,72,.80) 100%);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 40;
+}
+.app-footer{ background: linear-gradient(100deg, rgba(0,0,0,.93), rgba(157,121,72,.72)); }
+
+@media (max-width: 1400px){ :root{ --rail-w: 280px; --nav-w: 190px; } }
+@media (max-width: 1180px){
+  .layout{ grid-template-columns: 1fr; }
+  .side-left, .side-right{ position: static; }
+  .side-rail{ max-height: none; }
+  .nav-glass{ display: flex; flex-wrap: wrap; gap: 6px; }
+  .nav-glass .cap{ width: 100%; }
+  .nav-link{ width: auto; }
+}
+@media print{ .side-left, .side-right{ display: none; } .layout{ grid-template-columns: 1fr; } }
+
+/* ============================================================================
+   Refinements: give the content column the full width when the rail is closed,
+   stop the Live Output tab strip colliding when it wraps, and calm the glass so
+   text reads cleanly on top of it. Still no palette token is changed.
+   ========================================================================== */
+
+/* --- more room for content: tighter chrome, narrower rails --- */
+:root{ --rail-w: 300px; --nav-w: 184px; }
+.layout{ gap: 14px; padding: 14px 18px 8px 18px; }
+
+/* Closed rail gives the column its full width; the rail becomes a slim tab
+   pinned to the viewport edge so it can always be reopened. */
+/* The rail leaves the grid flow when collapsed (position:fixed), so the grid must drop to two
+   columns — otherwise <main> is placed into the now-zero-width first track. */
+/* The reopen tab is position:fixed, so it sits over the page. Reserve a gutter the width of
+   the tab plus a margin, otherwise it covers the left edge of the content. */
+.layout.left-collapsed{ grid-template-columns: minmax(0,1fr) var(--nav-w); gap: 0 14px; padding-left: 60px; }
+.layout.left-collapsed .side-left{
+  position: fixed; left: 0; top: 132px; width: auto; z-index: 35;
+}
+.layout.left-collapsed .side-rail{
+  border-radius: 0 14px 14px 0;
+  border-left: 0;
+  box-shadow: 6px 8px 26px rgba(92,62,23,.16);
+}
+.layout.left-collapsed .side-rail-head{ padding: 12px 8px; }
+
+/* --- Live Output tabs: never let a wrapped row sit on the row above --- */
+.tabs{
+  row-gap: 0;
+  align-items: stretch;
+  border-radius: 15px 15px 0 0;
+  padding: 2px 2px 0 2px;
+}
+.tab{
+  margin-bottom: 0;              /* was -2px: pulled a wrapped row into the one above */
+  padding: 10px 15px;
+  letter-spacing: .05em;
+  border-right: 1px solid rgba(189,149,104,.22);
+  border-radius: 9px 9px 0 0;
+  line-height: 1.25;
+  transition: background .18s ease, color .18s ease;
+}
+.tab:hover{ background: rgba(189,149,104,.10); color: var(--black); }
+.tab.active{ background: rgba(255,255,255,.82); }
+.tab:last-child{ border-right: 0; }
+
+/* --- readability: glass that text can sit on cleanly --- */
+:root{
+  --glass-bg: rgba(255,255,255,.70);
+  --glass-bg-strong: rgba(255,255,255,.80);
+  --glass-brd: rgba(255,255,255,.72);
+  --glass-shadow: 0 12px 34px rgba(92,62,23,.09), 0 2px 6px rgba(92,62,23,.05);
+}
+body::after{ opacity: .22; }                 /* less grain behind body copy */
+.section-card{
+  -webkit-backdrop-filter: blur(26px) saturate(135%);
+  backdrop-filter: blur(26px) saturate(135%);
+  border-radius: 16px;
+  border-color: rgba(255,255,255,.72);
+  position: relative;
+}
+/* specular top edge — the highlight that makes the surface read as glass */
+.section-card::before{
+  content:""; position:absolute; inset:0 0 auto 0; height:1px; border-radius:16px 16px 0 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.95) 22%, rgba(255,255,255,.95) 78%, transparent);
+  pointer-events:none; z-index:1;
+}
+.section-body{
+  background: rgba(255,255,255,.34);
+  padding: 14px 16px;
+  border-radius: 0 0 15px 15px;
+}
+.section-head{ padding: 11px 16px; }
+.section-head .desc{ font-size: 11.5px; }
+
+/* --- typography: a little more air, nothing touching --- */
+body{ line-height: 1.5; }
+.sel-table{ font-size: 12.5px; }
+.sel-table th{ padding: 9px 9px; line-height: 1.3; }
+.sel-table td{ padding: 9px 9px; line-height: 1.35; }
+.htable th, .htable td{ line-height: 1.3; }
+.kpi-row{ gap: 14px; }
+.kpi{ padding: 12px 14px; }
+.hint{ line-height: 1.5; }
+
+/* wide tables scroll inside their card instead of squashing their columns */
+.section-body{ overflow-x: auto; }
+.master-wrap{ border-radius: 12px; }
+
+/* --- rails: quieter, so the middle column is clearly the subject --- */
+.side-rail, .nav-glass{
+  -webkit-backdrop-filter: blur(26px) saturate(135%);
+  backdrop-filter: blur(26px) saturate(135%);
+  border-color: rgba(255,255,255,.72);
+}
+.side-rail-body{ padding: 12px; }
+.side-rail-body .refresh-card{ padding: 12px; }
+.nav-glass{ padding: 12px 9px; }
+.nav-link{ font-size: 12px; padding: 8px 9px; }
+.nav-link .dot{ width: 21px; height: 21px; }
+
+/* --- header / footer: match the card radius language --- */
+.app-header{ border-bottom-width: 3px; }
+
+@media (max-width: 1500px){ :root{ --rail-w: 270px; --nav-w: 172px; } .tab{ padding: 10px 12px; } }
+@media (max-width: 1280px){ :root{ --rail-w: 250px; --nav-w: 160px; } .tab{ padding: 9px 10px; font-size: 11px; } }
+@media (max-width: 1180px){
+  .layout.left-collapsed .side-left{ position: static; }
+  .layout.left-collapsed{ --rail-w: auto; }
+  .layout.left-collapsed .side-rail{ border-radius: 16px; border-left: 1px solid var(--glass-brd); }
+}
+
+
+/* ==========================================================================
+   Rail declutter, single-line labels, full-height panels.
+   ========================================================================== */
+
+/* The rail is a work surface, not documentation: keep the controls, drop the prose. */
+.side-rail-body .refresh-hint,
+.side-rail-body .refresh-cadence,
+.side-rail-body .soa-tmpl{ display: none; }
+.side-rail-body .refresh-head{ margin-bottom: 8px; }
+.side-rail-body .refresh-card{ padding: 11px 12px; }
+.side-rail-body .refresh-card + .refresh-card{ margin-top: 0; }
+.side-rail-body .refresh-title{
+  font-size: 11.5px; letter-spacing: .06em; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.side-rail-body .refresh-drop{ padding: 9px 10px; font-size: 11.5px; line-height: 1.25; }
+.side-rail-body .soa-seg{ padding: 5px 10px; font-size: 11.5px; }
+.side-rail-body .refresh-status{ font-size: 11px; line-height: 1.35; }
+
+/* Labels read on one line rather than wrapping mid-phrase. */
+.section-head .title,
+.section-head .desc,
+.nav-link,
+.kpi .k-label,
+.tab,
+.addfund-bar{ white-space: nowrap; }
+.section-head .title{ overflow: hidden; text-overflow: ellipsis; }
+.section-head .desc{ overflow: hidden; text-overflow: ellipsis; max-width: 46%; }
+.nav-link span:last-child{ overflow: hidden; text-overflow: ellipsis; }
+.addfund-bar .tag{ overflow: hidden; text-overflow: ellipsis; }
+.sel-table th{ white-space: nowrap; }
+.htable th{ white-space: nowrap; }
+
+/* Both rails run the full height of the viewport and scroll independently. */
+.side-left, .side-right{ position: sticky; top: 84px; align-self: start; height: calc(100vh - 96px); }
+.side-rail{ height: 100%; max-height: none; }
+.nav-glass{ height: 100%; overflow: auto; display: flex; flex-direction: column; }
+.side-rail-body{ flex: 1 1 auto; }
+.layout.left-collapsed .side-left{ top: 84px; height: auto; }
+.layout.left-collapsed .side-rail{ height: auto; }
+
+/* Home sits above the numbered sections. */
+.nav-home .dot{ background: rgba(0,0,0,.86); color: #fff; border-color: rgba(0,0,0,.86); font-size: 13px; }
+.nav-home{ margin-bottom: 8px; }
+
+@media (max-width: 1180px){
+  .side-left, .side-right{ position: static; height: auto; }
+  .side-rail, .nav-glass{ height: auto; }
+}
+
+</style>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -4506,7 +4885,8 @@ function SectionCard({
   dense
 }) {
   return /*#__PURE__*/React.createElement("div", {
-    className: "section-shell"
+    className: "section-shell",
+    id: "sec-" + String(num).replace(/\W+/g, "")
   }, /*#__PURE__*/React.createElement("div", {
     className: "section-card"
   }, /*#__PURE__*/React.createElement("div", {
@@ -4804,6 +5184,7 @@ function AddFundForm({ onAddFund }) {
   const [exit, setExit] = useState("");
   const [tenure, setTenure] = useState("");
   const [msg, setMsg] = useState(null);
+  const [open, setOpen] = useState(false);
   const submit = () => {
     const ok = onAddFund({ name, assetClass: ac, productClass: pc, subCategory: sub, irrLow: irrLo, irrHigh: irrHi, exitLoad: exit, tenure: tenure });
     if (ok) {
@@ -4814,10 +5195,18 @@ function AddFundForm({ onAddFund }) {
   const inStyle = { width: "100%", border: "1px solid var(--border)", background: "#fff", padding: "6px 8px", fontFamily: "Cambria, Georgia, serif", fontSize: 13, boxSizing: "border-box" };
   const lbl = t => /*#__PURE__*/React.createElement("label", { style: { display: "block", fontSize: 11, fontWeight: 700, color: "var(--brown-text)", marginBottom: 3, letterSpacing: ".02em" } }, t);
   const sel = (val, setter, opts) => /*#__PURE__*/React.createElement("select", { style: inStyle, value: val, onChange: e => setter(e.target.value) }, opts.map(o => /*#__PURE__*/React.createElement("option", { key: o, value: o }, o)));
-  return /*#__PURE__*/React.createElement("div", {
-    style: { border: "1px solid var(--gold)", background: "var(--bg-yellow)", padding: 14, marginTop: 14 }
-  },
-    /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "var(--black)", marginBottom: 4 } }, "Add Fund"),
+  return /*#__PURE__*/React.createElement("div", { className: "addfund-glass" },
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "addfund-bar" + (open ? " open" : ""),
+      "aria-expanded": open ? "true" : "false",
+      onClick: () => setOpen(o => !o)
+    },
+      /*#__PURE__*/React.createElement("span", null, "Add Fund"),
+      /*#__PURE__*/React.createElement("span", { className: "tag" }, open ? "" : "— add an instrument that is not in the universe"),
+      /*#__PURE__*/React.createElement("span", { className: "chev" }, "\u25BC")
+    ),
+    open && /*#__PURE__*/React.createElement("div", { className: "addfund-panel" },
     /*#__PURE__*/React.createElement("div", { className: "hint", style: { marginTop: 0, marginBottom: 12 } }, "Add any instrument — across any asset class, product class or category — with an expected pre-tax IRR range, exit load and tenure. It becomes selectable in Pick Funds above and is saved with the Master export."),
     /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } }, lbl("Instrument / Fund Name"), /*#__PURE__*/React.createElement("input", { style: inStyle, placeholder: "e.g. XYZ Multi-Asset Fund-Reg(G)", value: name, onChange: e => setName(e.target.value) })),
     /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 } },
@@ -4834,6 +5223,7 @@ function AddFundForm({ onAddFund }) {
     /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } },
       /*#__PURE__*/React.createElement("button", { className: "btn-add", onClick: submit }, "+ Add Fund"),
       msg && /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: msg.ok ? "var(--green)" : "var(--red)" } }, msg.text)
+    )
     )
   );
 }
@@ -6146,7 +6536,7 @@ function DataRefreshPanel({
       /*#__PURE__*/React.createElement("button", { type: "button", className: "soa-seg " + (soaType === 'PMS' ? 'on' : ''), onClick: () => setSoaType('PMS') }, "PMS"),
       /*#__PURE__*/React.createElement("button", { type: "button", className: "soa-seg " + (soaType === 'AIF' ? 'on' : ''), onClick: () => setSoaType('AIF') }, "AIF")
     ),
-    /*#__PURE__*/React.createElement("label", { className: "refresh-drop" }, "Drop / browse SOA xlsx (" + soaType + ")",
+    /*#__PURE__*/React.createElement("label", { className: "refresh-drop" }, "Drop / browse SOA xlsx",
       /*#__PURE__*/React.createElement("input", { type: "file", accept: ".xlsx,.xls", onChange: e => handleSOA(e.target.files[0]) })
     ),
     /*#__PURE__*/React.createElement("button", { type: "button", className: "soa-tmpl", onClick: downloadTemplate }, "↓ Download blank template"),
@@ -6164,7 +6554,7 @@ function DataRefreshPanel({
     /*#__PURE__*/React.createElement("label", { className: "refresh-drop", style: { paddingTop: 8, paddingBottom: 8 } }, "As on date",
       /*#__PURE__*/React.createElement("input", { type: "date", value: sifDate, onChange: e => setSifDate(e.target.value), style: { display: 'block', marginTop: 4 } })
     ),
-    /*#__PURE__*/React.createElement("label", { className: "refresh-drop" }, "Drop / browse SIF performance xlsx",
+    /*#__PURE__*/React.createElement("label", { className: "refresh-drop" }, "Drop / browse xlsx",
       /*#__PURE__*/React.createElement("input", { type: "file", accept: ".xlsx,.xls", onChange: e => { handleSifPerf(e.target.files[0]); e.target.value = ""; } })
     ),
     sifStatus && /*#__PURE__*/React.createElement("div", { className: "refresh-status " + sifStatus.state }, sifStatus.msg)
@@ -6215,7 +6605,7 @@ function DataRefreshPanel({
     style: { display: 'block', marginTop: 4 }
   })), /*#__PURE__*/React.createElement("label", {
     className: "refresh-drop"
-  }, c.planned ? "Drop / browse " + mfPlan + " MF Monitor xlsx" : "Drop / browse xlsx",
+  }, "Drop / browse xlsx",
   /*#__PURE__*/React.createElement("input", {
     type: "file",
     accept: ".xlsx,.xls",
@@ -7934,6 +8324,84 @@ function NetAllocTab({ selected, corpus }) {
     }, "Hybrid funds are split into equity and debt using their analytics equity holding (HYBRID_ANALYTICS). Commodity (Gold/Silver) is shown separately as it is neither equity nor debt."));
 }
 
+// Right-hand jump list. Tracks which section is in view with an IntersectionObserver so the
+// active entry follows the scroll; purely navigational, it renders no proposal data.
+function SectionNav({ items }) {
+  const [active, setActive] = useState(items.length ? items[0].id : null);
+  useEffect(() => {
+    const els = items.map(i => document.getElementById(i.id)).filter(Boolean);
+    if (!els.length || typeof IntersectionObserver === "undefined") return;
+    const seen = new Map();
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => seen.set(e.target.id, e.intersectionRatio));
+      let best = null, bestR = 0;
+      seen.forEach((r, id) => { if (r > bestR) { bestR = r; best = id; } });
+      if (best) setActive(best);
+    }, { rootMargin: "-90px 0px -55% 0px", threshold: [0, .15, .35, .6, 1] });
+    els.forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, [items.map(i => i.id).join("|")]);
+  // Scroll is animated by hand rather than with behavior:"smooth" — some browsers ignore that
+  // flag entirely, and the link would then appear to do nothing. Also offsets the sticky header
+  // so the section heading is never left hidden underneath it.
+  const scrollToY = target => {
+    const start = window.pageYOffset || document.documentElement.scrollTop || 0;
+    const dist = target - start;
+    if (Math.abs(dist) < 2) return;
+    // A hidden or throttled page gets no animation frames at all, and an animation-only jump
+    // would then silently do nothing. Go straight there in that case.
+    if (document.hidden || typeof requestAnimationFrame !== "function") { window.scrollTo(0, target); return; }
+    const now = () => (window.performance && performance.now) ? performance.now() : Date.now();
+    const t0 = now();
+    const dur = Math.min(620, 240 + Math.abs(dist) * 0.32);
+    let ran = false;
+    const step = () => {
+      ran = true;
+      const p = Math.min(1, (now() - t0) / dur);
+      const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      window.scrollTo(0, start + dist * e);
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    // Safety net: if frames never arrived, or the animation stalled, land on the target anyway.
+    setTimeout(function () {
+      const y = window.pageYOffset || document.documentElement.scrollTop || 0;
+      if (!ran || Math.abs(y - target) > 4) window.scrollTo(0, target);
+    }, dur + 160);
+  };
+  const go = id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    setActive(id);
+    const head = document.querySelector(".app-header");
+    const pad = (head ? head.getBoundingClientRect().height : 0) + 12;
+    const start = window.pageYOffset || document.documentElement.scrollTop || 0;
+    scrollToY(Math.max(0, start + el.getBoundingClientRect().top - pad));
+  };
+  return /*#__PURE__*/React.createElement("div", { className: "nav-glass" },
+    /*#__PURE__*/React.createElement("div", { className: "cap" }, "Sections"),
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "nav-link nav-home",
+      onClick: () => { setActive(items.length ? items[0].id : null); scrollToY(0); },
+      title: "Back to the top"
+    },
+      /*#__PURE__*/React.createElement("span", { className: "dot" }, "\u2302"),
+      /*#__PURE__*/React.createElement("span", null, "Home")
+    ),
+    items.map(it => /*#__PURE__*/React.createElement("button", {
+      key: it.id,
+      type: "button",
+      className: "nav-link" + (active === it.id ? " on" : ""),
+      onClick: () => go(it.id),
+      title: it.label
+    },
+      /*#__PURE__*/React.createElement("span", { className: "dot" }, it.num),
+      /*#__PURE__*/React.createElement("span", null, it.label)
+    ))
+  );
+}
+
 function App() {
   const initial = useM3(() => loadFromHash(), []);
   // Shared-view mode — when the dashboard is opened from a #p=... link, Section 7
@@ -7956,6 +8424,8 @@ function App() {
   // AUM / expense / m-cap value across the dashboard and exports is sourced from the
   // Direct MF Monitor (window.DIRECT_PERF); funds with no Direct data keep Regular values.
   const [planMode, setPlanMode] = useS3('Regular');
+  // Left rail (Data Refresh) open by default on a wide screen, collapsible to a spine.
+  const [railOpen, setRailOpen] = useS3(true);
   // Presentation logo — drives the on-screen header and the PPTX deck. Presets are
   // Centricity (default), Invictus and OneDigital; the user can also upload any logo.
   const LOGO_PRESETS = window.LOGO_PRESETS || {};
@@ -8211,7 +8681,37 @@ function App() {
     className: "badge"
   }, "SHARED VIEW"), /*#__PURE__*/React.createElement("span", {
     className: "msg"
-  }, "You are viewing a shared proposal. Data Refresh and Master Editor are frozen \u2014 explore, export and edit allocations only.")), /*#__PURE__*/React.createElement(SectionCard, {
+  }, "You are viewing a shared proposal. Data Refresh and Master Editor are frozen \u2014 explore, export and edit allocations only.")), /*#__PURE__*/React.createElement("div", {
+    className: "layout" + (railOpen ? "" : " left-collapsed")
+  }, /*#__PURE__*/React.createElement("aside", {
+    className: "side-left"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "side-rail"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "side-rail-head"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "t"
+  }, isShared ? "Data Refresh \u2014 Frozen" : "Data Refresh"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "side-toggle",
+    title: railOpen ? "Collapse panel" : "Expand panel",
+    "aria-expanded": railOpen ? "true" : "false",
+    onClick: () => setRailOpen(v => !v)
+  }, railOpen ? "\u2039" : "\u203A")), /*#__PURE__*/React.createElement("div", {
+    className: "side-rail-body"
+  }, isShared ? /*#__PURE__*/React.createElement("div", {
+    className: "frozen-pane"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "frozen-lock"
+  }, "\uD83D\uDD12"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "frozen-title"
+  }, "Data Refresh is frozen"), /*#__PURE__*/React.createElement("div", {
+    className: "frozen-sub"
+  }, "Uploads are disabled in a shared view."))) : /*#__PURE__*/React.createElement(DataRefreshPanel, {
+    onDataChanged: onDataRefreshed
+  })))), /*#__PURE__*/React.createElement("main", {
+    className: "col-main"
+  }, /*#__PURE__*/React.createElement(SectionCard, {
     num: "1",
     title: "Corpus & Allocation Summary",
     desc: "Total corpus drives every downstream amount."
@@ -8303,13 +8803,13 @@ function App() {
     if (T.id === 'equity') { props.exclude = eqExclude; props.setExclude = setEqExclude; }
     if (T.id === 'debt') { props.exclude = dbExclude; props.setExclude = setDbExclude; }
     return /*#__PURE__*/React.createElement(R, props);
-  })())),!isShared && /*#__PURE__*/React.createElement(SectionCard, {
+  })())), false && /*#__PURE__*/React.createElement(SectionCard, {
     num: "7",
     title: "Data Refresh",
     desc: "Replace analytics monthly \xB7 performance every 15 days. Drop the xlsx files below."
   }, /*#__PURE__*/React.createElement(DataRefreshPanel, {
     onDataChanged: onDataRefreshed
-  })), isShared && /*#__PURE__*/React.createElement(SectionCard, {
+  })), false && /*#__PURE__*/React.createElement(SectionCard, {
     num: "7",
     title: "Data Refresh \u2014 Frozen",
     desc: "Section frozen in shared view. Open the dashboard without the #p=... hash to re-enable uploads."
@@ -8322,7 +8822,8 @@ function App() {
   }, "Data Refresh is frozen"), /*#__PURE__*/React.createElement("div", {
     className: "frozen-sub"
   }, "Recipients of a shared proposal cannot mutate the dataset that the proposal was built on. To refresh data, open the dashboard from your bookmark (no link hash).")))), !isShared && /*#__PURE__*/React.createElement("div", {
-    className: "section-shell"
+    className: "section-shell",
+    id: "sec-master"
   }, /*#__PURE__*/React.createElement("div", {
     className: "section-card",
     style: {
@@ -8331,6 +8832,17 @@ function App() {
   }, /*#__PURE__*/React.createElement(MasterEditor, {
     master: master,
     setMaster: setMaster
+  })))), /*#__PURE__*/React.createElement("nav", {
+    className: "side-right"
+  }, /*#__PURE__*/React.createElement(SectionNav, {
+    items: [
+      { id: "sec-1", num: "1", label: "Corpus & Allocation" },
+      { id: "sec-2", num: "2", label: "Risk Profile" },
+      { id: "sec-3", num: "3", label: "Pick Funds" },
+      { id: "sec-4", num: "4", label: "Selected Funds" },
+      { id: "sec-5", num: "5", label: "Future Value" },
+      { id: "sec-6", num: "6", label: "Live Output" }
+    ].concat(isShared ? [] : [{ id: "sec-master", num: "M", label: "Master Data" }])
   }))), /*#__PURE__*/React.createElement("footer", {
     className: "app-footer"
   }, window.dataAsOf()));

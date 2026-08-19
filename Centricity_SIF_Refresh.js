@@ -70,7 +70,15 @@
 
         function cv(sheet, r, c) { var a = XLSX.utils.encode_cell({ r: r, c: c }); var cell = sheet[a]; return cell ? cell.v : null; }
         // Auto-detect percent vs decimal: 12.5 -> 0.125 ; 0.125 -> 0.125
-        function pctToDec(v) { if (v == null || v === '') return null; var n = Number(v); if (isNaN(n)) return null; return Math.abs(n) >= 1 ? n / 100 : n; }
+        // Returns only. A Date cell reads as epoch milliseconds through Number(), and an absurd
+        // magnitude means the column was mis-identified — reject rather than store 1760898590000%.
+        function pctToDec(v) {
+          if (v == null || v === '') return null;
+          if (v instanceof Date) return null;
+          var n = Number(v); if (!isFinite(n)) return null;
+          var d = Math.abs(n) >= 1 ? n / 100 : n;
+          return Math.abs(d) > 10 ? null : d;   // beyond 1000% is a mis-mapped column, not a return
+        }
         function norm(s) { return _normSif(s); }
         function fmtAsOnLite(d) { var M = ['January','February','March','April','May','June','July','August','September','October','November','December']; var day = d.getDate(), j = day % 10, k = day % 100; var s = (j === 1 && k !== 11) ? 'st' : (j === 2 && k !== 12) ? 'nd' : (j === 3 && k !== 13) ? 'rd' : 'th'; return day + s + ' ' + M[d.getMonth()] + ' ' + d.getFullYear(); }
         function parseDateLite(x) { if (x instanceof Date) return isNaN(x) ? null : x; var d = new Date(x); if (!isNaN(d)) return d; var m = String(x).match(/(\d{1,2})(?:st|nd|rd|th)?[\s_.-]+([A-Za-z]{3,9})[\s_.-]+(\d{4})/); if (m) { var MON = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 }; var mo = MON[m[2].slice(0,3).toLowerCase()]; if (mo != null) { var dd = new Date(+m[3], mo, +m[1]); if (!isNaN(dd)) return dd; } } return null; }
@@ -94,6 +102,9 @@
         function colKind(h) {
           var t = String(h == null ? '' : h).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
           if (!t) return null;
+          // "Inception Date" must not reach 'si' through /incept/ — a date column is never a
+          // return and never an AUM.
+          if (/\bdate\b/.test(t)) return null;
           if (/\baum\b/.test(t)) return 'aum';
           if (/since inception|incept|^si$/.test(t)) return 'si';
           if (/\b10\s*y/.test(t)) return 'r10y';
@@ -135,7 +146,9 @@
             var got = false;
             Object.keys(colMap).forEach(function (ci) {
               var field = colMap[ci], raw = cv(sheet, r, parseInt(ci, 10));
-              var val = field === 'aum' ? (raw == null || isNaN(Number(raw)) ? null : Number(raw)) : pctToDec(raw);
+              var val = field === 'aum'
+                ? ((raw == null || raw instanceof Date || !isFinite(Number(raw))) ? null : Number(raw))
+                : pctToDec(raw);
               if (val != null && !(typeof val === 'number' && isNaN(val))) { rec[field] = val; got = true; updatedFields++; }
             });
             if (got) matched++;
