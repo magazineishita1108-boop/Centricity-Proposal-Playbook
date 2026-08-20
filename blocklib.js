@@ -36,10 +36,14 @@ function read(file, prefix) { return locate(fs.readFileSync(file, 'utf8'), prefi
 // Splice several blocks in one pass; writes from the end backwards so earlier offsets stay valid.
 function writeBlocks(file, updates) {
   let html = fs.readFileSync(file, 'utf8');
+  // The </html> check is the standing guarantee for index.html, but the sibling override files
+  // are plain .js. Derive the expectation from the INPUT rather than assuming HTML, so index.html
+  // keeps the guard and no caller can forget to ask for it.
+  const wasHtml = html.trimEnd().endsWith('</html>');
   const spots = updates.map(u => ({ ...locate(html, u.prefix), value: u.value, prefix: u.prefix }));
   spots.sort((a, b) => b.s - a.s);
   for (const sp of spots) html = html.slice(0, sp.s) + JSON.stringify(sp.value) + html.slice(sp.e + 1);
-  if (!html.trimEnd().endsWith('</html>')) throw new Error('output does not end with </html>');
+  if (wasHtml && !html.trimEnd().endsWith('</html>')) throw new Error('output does not end with </html>');
   fs.writeFileSync(file, html, 'utf8');
   return html.length;
 }

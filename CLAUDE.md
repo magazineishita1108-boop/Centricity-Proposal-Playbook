@@ -63,6 +63,7 @@ Do not re-add a script tag for it without first checking the inline block would 
 | `add_reckoner_funds.js` | LIVE — adds instruments the deck recommends but MASTER lacks (a **universe** change) |
 | `merge_analytics.js` | LIVE — re-bakes ONE analytics class; `bake_month.js` does all three plus the monitor |
 | `rekey_sif_analytics.js` | LIVE — **required after every analytics bake**; see *SIF analytics are keyed differently* |
+| `merge_pms_aif_analytics.js` | LIVE — PMS/AIF equity look-through; **writes the sibling too** |
 | `blocklib.js` | LIVE — brace-matching splicer; **every merge_*.js tool requires it** |
 | `verify_page.js` | LIVE — runs the page in a Node `vm` and prints the true in-browser counts |
 | `*_Build_Prompt.md` | Historical build specs, reference only |
@@ -427,6 +428,39 @@ single-fund selection: Edelweiss Altiva Hybrid 45.21 Cr equity / 45.91 Cr debt, 
 Hybrid 49.20 / 39.90, Edelweiss Altiva Equity Ex-Top 100 100.00 equity and correctly *skipped* on
 the debt side. Currently 23 of 28 SIF funds reach equity analytics and 11 of 28 reach debt.
 
+### PMS/AIF look-through is written in TWO places
+
+```bash
+node merge_pms_aif_analytics.js "<PMS & AIF Analytics <Month Year>.xlsx>" --as-on "31st July 2026" --apply
+```
+
+The workbook is one row per holding — `Product Category | Scheme Name | Company Name | Corrected
+Name | Holding(%) | Sector | ISIN | SEBI Mcap`. Two things to get right:
+
+- **`Holding(%)` is a FRACTION**, not a percent: each scheme sums to ~1.0, so everything is
+  scaled by 100 to reach the store's percent scale. Check the per-scheme sum before trusting it.
+- **`Corrected Name` is the security name to key on**, not `Company Name`.
+
+**`Centricity_June_Refresh.js` carries its own `EQ` object of 12 PMS/AIF records from the
+May-2026 file and re-assigns them on every page load** (`window.EQUITY_ANALYTICS[k] = EQ[k]`).
+Baking a newer month into the embedded block alone leaves those schemes silently reverting to May
+— the same trap as the GIFT City bucket. The tool updates the sibling's `EQ` for every scheme it
+shares (5 in the July run) and leaves the sibling-only ones untouched (Vedartha, Carnelian Bharat
+Amritkaal, Motilal Oswal Founders, ICICI Pru Contra and the rest still carry May data).
+
+Scheme names need pinning by hand — `Abakkus All Cap Approach` → `Abakkus All Cap PMS`,
+`Stallion Asset Core Fund Portfolio` → `Stallion Asset Core Fund`, and so on. `Product Category`
+is what separates the PMS `Buoyant Capital- Opportunities Strategy` from the AIF
+`Buoyant Capital – Opportunities Strategy` (they differ only by dash character).
+
+July mapped 8 of 10 schemes; `3P INDIA EQUITY FUND 1` and `AlfAccurate India Equity Fund Scheme 1`
+have no MASTER instrument and are reported, not invented. Effective PMS/AIF with look-through:
+**16 of 55**.
+
+**`blocklib.writeBlocks` derives its `</html>` guard from the input**, so it keeps the guarantee
+for `index.html` and still works on the `.js` siblings. It refused rather than corrupting the
+sibling when the guard was unconditional — do not weaken it to a caller-supplied flag.
+
 ### SIF analytics are keyed by the scheme name, not the fund name
 
 The analytics workbooks name a SIF by its scheme alone — `Altiva Hybrid Long-Short Fund-Reg(G)`
@@ -510,7 +544,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | MASTER performance | `Daily MF monitor_<date>.xlsx` (48 sheets) | ~15 days | 30 Jun 2026 |
 | Direct-plan overlay | `Daily MF Monitor_Direct_<date>.xlsx` | with above | 30 Jun 2026 |
 | Equity/Hybrid/Debt Analytics | `<Class> Analytics_<Month>.xlsx` | monthly | 30 Jun 2026 |
-| PMS look-through | `PMS Analytics_<Month>.xlsx` | monthly | 30 Jun 2026 |
+| PMS/AIF look-through | `PMS & AIF Analytics <Month Year>.xlsx` (Desktop root) | monthly | 31 Jul 2026 |
 | PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` | monthly | 31 Jul 2026 |
 | AIF performance + benchmarks | *no recurring source* | frozen | May 2026 |
 | Direct Equity | `Listed Direct Equity_<Month>.xlsx` | monthly | 28 Jul 2026 |
