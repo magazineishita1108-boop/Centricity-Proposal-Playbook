@@ -34,6 +34,11 @@ const PIN = {
   'Abakkus All Cap Approach':                               'Abakkus All Cap PMS',
   'Abakkus Emerging Opportunities Approach Portfolio':      'Abakkus Emerging Opportunities Fund',
   'AlfAccurate Budding Beasts':                             'AlfAccurate Budding Beasts PMS',
+  // The workbook spells the AMC out; MASTER abbreviates it on these two only — "ICICI Prudential
+  // Value Strategy" and "ICICI Prudential Large Cap" already match verbatim, so do not blanket
+  // rewrite "ICICI Prudential" to "ICICI Pru".
+  'ICICI Prudential Contra Strategy':                       'ICICI Pru Contra Strategy',
+  'ICICI Prudential PIPE Strategy':                         'ICICI Pru PIPE Strategy',
 };
 // In the workbook but with no MASTER instrument. Adding one is a universe change
 // (add_reckoner_funds.js), not a refresh — so the holdings are reported and skipped.

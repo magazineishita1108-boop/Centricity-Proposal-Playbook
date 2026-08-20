@@ -445,17 +445,20 @@ Name | Holding(%) | Sector | ISIN | SEBI Mcap`. Two things to get right:
 May-2026 file and re-assigns them on every page load** (`window.EQUITY_ANALYTICS[k] = EQ[k]`).
 Baking a newer month into the embedded block alone leaves those schemes silently reverting to May
 — the same trap as the GIFT City bucket. The tool updates the sibling's `EQ` for every scheme it
-shares (5 in the July run) and leaves the sibling-only ones untouched (Vedartha, Carnelian Bharat
-Amritkaal, Motilal Oswal Founders, ICICI Pru Contra and the rest still carry May data).
+shares (9 in the July run) and leaves the sibling-only ones untouched (Vedartha, Carnelian Bharat
+Amritkaal and Motilal Oswal Founders still carry May data).
 
 Scheme names need pinning by hand — `Abakkus All Cap Approach` → `Abakkus All Cap PMS`,
 `Stallion Asset Core Fund Portfolio` → `Stallion Asset Core Fund`, and so on. `Product Category`
 is what separates the PMS `Buoyant Capital- Opportunities Strategy` from the AIF
 `Buoyant Capital – Opportunities Strategy` (they differ only by dash character).
 
-July mapped 8 of 10 schemes; `3P INDIA EQUITY FUND 1` and `AlfAccurate India Equity Fund Scheme 1`
+July mapped 13 of 15 schemes; `3P INDIA EQUITY FUND 1` and `AlfAccurate India Equity Fund Scheme 1`
 have no MASTER instrument and are reported, not invented. Effective PMS/AIF with look-through:
-**16 of 55**.
+**17 of 55**.
+
+**Rahul re-issues this file mid-cycle.** The 20-Aug morning copy had 10 schemes; the 11:22 copy had
+15, adding the five ICICI strategies. Re-check the scheme count before assuming a re-run is a no-op.
 
 **`blocklib.writeBlocks` derives its `</html>` guard from the input**, so it keeps the guarantee
 for `index.html` and still works on the `.js` siblings. It refused rather than corrupting the
