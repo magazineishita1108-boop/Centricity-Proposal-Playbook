@@ -32,7 +32,7 @@ Load order is fixed and load order matters:
 |---|---|---|---|---|
 | 1 | L836 | `Centricity_ExtraSlides.js` | `EXTRA_SLIDES` | — (independent of MASTER, so it can load early) |
 | 2 | L837 | `Centricity_PMS_AIF_Terms.js` | `PMS_AIF_TERMS` (73) | — |
-| 3 | L4189 | `Centricity_June_Refresh.js` | `MASTER`, `EQUITY_ANALYTICS`, `DATA_DATES` | 7452 → 7456 |
+| 3 | L4189 | `Centricity_June_Refresh.js` | `MASTER`, `EQUITY_ANALYTICS`, `DATA_DATES` | 7452 → 7456; **REPLACES the whole GIFT City bucket** |
 | 4 | L4190 | `Centricity_IRR_Offshore.js` | `MASTER`, `BENCHMARKS`, `RATIONALE`, `LIQUIDITY_MAP` | 7456 → 7456 (reclassifies 4 → `Offshore Funds`) |
 | 5 | L4191 | `Centricity_SIF_Refresh.js` | `MASTER`, `DATA_DATES`, `REFRESH`, `BENCHMARKS` | 7456 → 7460 (SIF 12 → 28) |
 
@@ -58,6 +58,13 @@ Do not re-add a script tag for it without first checking the inline block would 
 | `README.md` | **STALE — do not follow it.** Documents `tools/build_*.py` scripts, a GitHub Pages repo and `cdnjs.cloudflare.com`. None exist: the folder has **zero subfolders** (no `tools/`, no `.git`) and the CDNs are actually unpkg + jsdelivr. |
 | `build_risk_matrix.py` + `Risk_Matrix_Update_Prompt.md` | LIVE — the monthly Portfolio Matrix runbook |
 | `PMS_Performance_Update_Prompt.md` | LIVE — monthly PMS performance runbook |
+| `merge_pms_performance.js` + `pin_pms_alias.js` | LIVE — the PMS performance refresh |
+| `merge_reckoner.js` + `reck_parse.js` + `reck_narrative.js` + `pptx.js` | LIVE — the Centricity Select refresh |
+| `add_reckoner_funds.js` | LIVE — adds instruments the deck recommends but MASTER lacks (a **universe** change) |
+| `merge_analytics.js` | LIVE — re-bakes ONE analytics class; `bake_month.js` does all three plus the monitor |
+| `rekey_sif_analytics.js` | LIVE — **required after every analytics bake**; see *SIF analytics are keyed differently* |
+| `blocklib.js` | LIVE — brace-matching splicer; **every merge_*.js tool requires it** |
+| `verify_page.js` | LIVE — runs the page in a Node `vm` and prints the true in-browser counts |
 | `*_Build_Prompt.md` | Historical build specs, reference only |
 | `*.bak*`, `*.broken*` | 49 rollback snapshots. Archive candidates >60 days old. |
 
@@ -77,14 +84,14 @@ Line numbers below are as of 28-Jul-2026 and **drift with every edit** — re-de
 | L834 | `DIRECT_PERF` — 1,688 funds (Regular/Direct plan toggle overlay) |
 | L836–837 | siblings 1–2 |
 | L838 | header comments |
-| **L1031** | **`MASTER` — 7,452 records (the baseline universe)** |
+| **L1031** | **`MASTER` — 7,599 records (the baseline universe)** |
 | L1032 | `EQUITY_ANALYTICS` 1,110 · `HYBRID_ANALYTICS` 199 · `DEBT_ANALYTICS` 490 |
-| L1037 | `CENTRICITY_SELECT` — 149 |
+| L1037 | `CENTRICITY_SELECT` — 178 (Aug-2026 Reckoner) |
 | L1041 | `MF_BENCHMARK_PERF` — 26 categories |
 | L1045 | `DATA_DATES` (4 keys here; a 5th, `riskMatrix`, is added at L4192) |
 | L1043 / L1428 | `window.H` helpers + extensions |
 | L2161 | Risk profiles, strategy options, benchmark mapping |
-| L2194 | `PMS_PERFORMANCE` → `pms` 314 · `aif` 11 · `benchmarks` 4 |
+| L2194 | `PMS_PERFORMANCE` → `pms` 690 · `aif` 11 · `benchmarks` 4 |
 | L2401 | In-browser xlsx parsers (the Section 7 uploaders) |
 | L2971 | Excel + PowerPoint export |
 | L4189–4191 | siblings 3–5 |
@@ -96,14 +103,14 @@ Line numbers below are as of 28-Jul-2026 and **drift with every edit** — re-de
 `window.MASTER` is also assigned at L2629, L2829, L2949, L7593–94, L7629–30 — those are **runtime
 uploader / add-fund handlers**, not data blocks. Only L1031 is the baseline.
 
-### Effective in-browser universe (after all five siblings run): **7,603**
+### Effective in-browser universe (after all five siblings run): **7,607**
 
 Direct Equity 5,353 · Bonds 50 (Invictus 36 · OneDigital 14) · SIF 28 · the rest as before.
 
-`EQUITY_ANALYTICS` 1,152 · `HYBRID_ANALYTICS` 246 · `DEBT_ANALYTICS` 495 · `DIRECT_PERF` 1,676 ·
+`EQUITY_ANALYTICS` 1,155 · `HYBRID_ANALYTICS` 246 · `DEBT_ANALYTICS` 495 · `DIRECT_PERF` 1,676 ·
 `MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
 
-Effective `DATA_DATES`: performance / analytics = `31st July 2026`, pms = `30th June 2026`,
+Effective `DATA_DATES`: performance / analytics / pms = `31st July 2026`,
 `riskMatrix` = `30 Jun 2026`, **`sif` = `—` (still unset)**.
 
 **`Centricity_June_Refresh.js` used to stamp `DATA_DATES.analytics = "30th June 2026"` on every
@@ -191,6 +198,14 @@ Windows path.
 - The Bond List repeats the same bond in two formats within one sheet
   (`7.7942 L&T FINANCE LIMITED 27JUN2031` and `7.7942% L& T Finance 2031`), and sometimes drops
   the coupon entirely (`NAVI FINSERV 31.08.2029`). Dedupe on issuer + maturity, not on the name.
+- **A new GIFT City record must go into `Centricity_June_Refresh.js`, not just the embedded block.**
+  Sibling #3 runs
+  `window.MASTER = window.MASTER.filter(f => f.product_class !== "GIFT City").concat(NEW_GIFT)`
+  on every page load — it drops the entire baseline GIFT City bucket and substitutes its own
+  list. A fund added only to L1031 is present in the file, parses fine, passes a baseline count
+  check, and is simply gone in the browser. `add_reckoner_funds.js` writes both and re-runs
+  idempotently to repair drift; the giveaway is a `CENTRICITY_SELECT` key that no longer
+  resolves once the siblings have run, which is why `verify_page.js` prints that count.
 - Reclassifying a fund without checking for an existing same-named record silently creates a
   duplicate. There are currently **0 duplicate names** in the effective MASTER — keep it that way.
 - `sebi_mcap` must be joined **by company name, not row position** (this bug shipped for ~8 months,
@@ -382,6 +397,63 @@ Two things to know:
   this month's workbook keeps its old holdings under the new date. Always run the variant fill
   below afterwards, then chase whatever is still missing upstream.
 
+### SIF is a hybrid scheme — `H.isHybridScheme` decides, nothing else
+
+A SIF has an equity leg and a debt leg in one vehicle, exactly like a hybrid MF; it is a separate
+`product_class` only because SEBI registers it separately. Four gates each carried their own copy
+of `asset_class === 'Hybrid' && product_class === 'Mutual Fund'`:
+
+| | |
+|---|---|
+| `H.inEquityScope` | which selected funds the Equity Analytics tab lists |
+| `H.inDebtScope` | same for Debt Analytics |
+| `H.aggEquityScoped` | the equity look-through itself |
+| `H.aggDebtScoped` | the debt look-through |
+
+All four excluded SIF, so a SIF fund was dropped from the analytics **even with its holdings
+present and correctly keyed** — `H.hasEqHoldings` returned true and nothing downstream cared.
+Fixing only the key names (see above) is not enough; both halves were needed. All four now call
+the single predicate `H.isHybridScheme(f)` — keep it that way rather than re-inlining the test.
+
+**An equity-only long-short SIF is filed as Hybrid but its holdings land in `EQUITY_ANALYTICS`,**
+where the fields are unprefixed (`mcap`/`sector`/`stocks`/`total`) rather than the `eq_*` set a
+hybrid record carries. `aggEquityScoped` therefore tries the hybrid store first and falls back to
+the equity store for a hybrid-class fund — the order matters, so a fund present in both is still
+read from its hybrid record.
+
+Verify with the aggregators, not the store: `H.aggEquityScoped([{fund, pct:100}], 100, new Set())`
+should return a non-zero `exposure_cr` plus real sectors and stocks. Live result for a 100 Cr
+single-fund selection: Edelweiss Altiva Hybrid 45.21 Cr equity / 45.91 Cr debt, Tata Titanium
+Hybrid 49.20 / 39.90, Edelweiss Altiva Equity Ex-Top 100 100.00 equity and correctly *skipped* on
+the debt side. Currently 23 of 28 SIF funds reach equity analytics and 11 of 28 reach debt.
+
+### SIF analytics are keyed by the scheme name, not the fund name
+
+The analytics workbooks name a SIF by its scheme alone — `Altiva Hybrid Long-Short Fund-Reg(G)`
+— while MASTER names it with the AMC in front: `Edelweiss Altiva Hybrid Long-Short Fund`. Every
+other analytics key is the MASTER name, so the holdings parse fine, land in the store, and are
+then simply unreachable: the fund shows no sectors, no stocks and no credit profile, and
+`H.hasEqHoldings` / `H.hasDbHoldings` drop it from the analytics and overlap sections. Nothing
+errors and no count looks wrong — the store size is right, the keys are not.
+
+```bash
+node rekey_sif_analytics.js --apply
+```
+
+No fuzzy matching is involved: `Centricity_SIF_Refresh.js` records the workbook name on each
+record as **`sif_raw`**, so the join is exact. The tool moves the entry and deletes the old key,
+and re-running is a no-op. **`parseAnalytics` re-creates the workbook-named keys, so this must
+be re-run after every bake** — same standing requirement as `fill_variant_analytics.js`.
+
+Currently 23 of 28 SIF funds resolve. The other five are absent from the July workbooks
+altogether and need chasing upstream, not re-keying: Kotak Infinity Hybrid, Mirae Asset Platinum
+Hybrid, Quants Qsif Sector Rotation, Franklin Sapphire Equity, **Tata Titanium Equity**.
+
+**Equity and hybrid records have different field names.** An `EQUITY_ANALYTICS` record is
+`{mcap, sector, stocks, total}`; a `HYBRID_ANALYTICS` one is
+`{eq_mcap, eq_sector, eq_stocks, eq_total, db_sector, db_holdings, db_rating, db_total}`.
+Probing a hybrid field on an equity record returns undefined and reads as "no holdings".
+
 **Always follow a bake with `fill_variant_analytics.js`:**
 
 ```bash
@@ -439,7 +511,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | Direct-plan overlay | `Daily MF Monitor_Direct_<date>.xlsx` | with above | 30 Jun 2026 |
 | Equity/Hybrid/Debt Analytics | `<Class> Analytics_<Month>.xlsx` | monthly | 30 Jun 2026 |
 | PMS look-through | `PMS Analytics_<Month>.xlsx` | monthly | 30 Jun 2026 |
-| PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` | monthly | 30 Jun 2026 |
+| PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` | monthly | 31 Jul 2026 |
 | AIF performance + benchmarks | *no recurring source* | frozen | May 2026 |
 | Direct Equity | `Listed Direct Equity_<Month>.xlsx` | monthly | 28 Jul 2026 |
 | Bonds | `Bond List_<date>.xlsx` → `merge_bond_list.js` | periodic | Invictus 6 Aug 2026; OneDigital older |
@@ -448,7 +520,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | Expected IRR | Exit Load & Expected IRR file (**format changed** — verify columns each run) | monthly | — |
 | Portfolio Matrix | `NAV Data as on <date>.xlsx` | monthly | 30 Jun 2026 (1,088 funds) |
 | Market Update slides | `Market Update Slide_<Month Year>.pptx` | monthly | August 2026 (5 slides) |
-| Centricity Select | `Monthly Investment Reckoner - <Month>.pptx` | monthly | Jun 2026 |
+| Centricity Select | `Monthly Investment Reckoner - <Month Year>.pptx` | monthly | Aug 2026 |
 
 **Procedure for any refresh:**
 1. Identify which embedded block *or* which sibling the source file drives.
@@ -459,6 +531,81 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 
 ---
 
+## The monthly Reckoner (Centricity Select + PMS performance)
+
+Two separate refreshes, both driven by files Rahul drops in the month folder. Run PMS first — the
+Reckoner's own index is the tie-breaker for the alias pins.
+
+```bash
+node merge_pms_performance.js "<PMS_Scheme_Performance_<Month Year>.xlsx>" --as-on "31st July 2026" --html index.html
+node pin_pms_alias.js --html index.html
+node merge_reckoner.js "<Monthly Investment Reckoner - <Month Year>.pptx>" --html index.html
+node verify_page.js .
+```
+
+All four are dry-run by default; add `--apply` to write. Gates refuse to write on a regression.
+
+### PMS performance
+
+`PMS_PERFORMANCE.pms` is **replaced wholesale**; `aif` and `benchmarks` are carried forward
+verbatim — **this file is PMS-only and cannot update AIF**, which has no recurring source and is
+frozen at May 2026.
+
+- **The vendor renames schemes.** July 2026 arrived with only 118 of 314 old keys intact
+  (`ICICI - Value Strategy` → `ICICI Prudential - Value Portfolio`). That silently broke 9 alias
+  pins. `PMS_PERF_ALIAS` is **maintained by hand, never guessed** — a wrong pin puts another
+  manager's numbers on a client's fund. The `REPIN` map at the top of `merge_pms_performance.js`
+  is where renames go; the gate is *MASTER PMS funds with performance must not fall*.
+- **AUM units are decided per column, not per row.** The old ">10 lakh means rupees" rule turned a
+  genuine 7-lakh-rupee scheme into 700,000 Cr. `const inRupees = Math.max(...aums) > 1e8`.
+- AUM values arrive as comma-formatted **strings** (`"20,41,79,00,000.00"`), so `parseFloat` after
+  stripping commas — not `Number()`.
+- The m-cap columns and the `Top Sector` sheet were **entirely empty** in July, so `top_sector_pct`
+  could not be derived. Check before assuming the runbook's shape still holds.
+
+Four pins are still `null` because the file genuinely has no counterpart: Burman Capital,
+Phillip Conservative Credit, Sundaram F.I.R.S.T. Debt, Julius Baer Premier Focused.
+
+### Centricity Select
+
+`merge_reckoner.js` rebuilds `CENTRICITY_SELECT` from the deck's **performance grids** — a table
+whose first header cell reads `Scheme Name` / `Strategy` and that has ≥8 columns. Everything else
+on a slide is narrative (fee ladders, "About the strategy" boxes) and must not parse as a fund;
+an earlier looser parser turned `Fixed` / `Hybrid` / `Variable` into 300 phantom funds.
+
+- **Membership comes from the deck; the dashboard's 33 categories do not change.** `GRID` maps a
+  deck heading to an existing `sheet`/`category`. Deck buckets the dashboard has no Select bucket
+  for (Overnight, Liquid, Floater, target-maturity FoF, plain index trackers, ETF, International,
+  Aggressive Hybrid, Equity Savings, Conservative Hybrid, Dynamic Asset Allocation) are **reported,
+  never auto-added** — a Select badge is a house recommendation, not a data point.
+- **The deck merged Sectoral and Thematic into one heading** in August. The split is taken from
+  MASTER's own `sub_category`, not from a judgement call in the script.
+- **Smart Beta is a factor tilt, not a cap-weighted tracker.** Only momentum / low-vol / value-20 /
+  alpha-50 / equal-weight / quality names come out of the deck's `Index Funds` heading.
+- `reckonerName`, `category` and `sheet` are **metadata only** — the UI reads `rationale`, the five
+  risk ratios, `benchmark` and `details`. `category` is the one shown, as the popover's sub-head.
+- **Retained funds keep their rationale and ratios.** New PMS / AIF / Unlisted / Gift entries take
+  both from their own narrative slide. New **MF** entries get neither: the deck's MF pages are
+  performance grids with no per-fund rationale, and no risk-ratio workbook shipped in July. The
+  script lists them at the end — they render with `—` until someone writes the text.
+- Two traps in the narrative extractor, both fixed, both easy to reintroduce:
+  the unlisted-equity slides carry a ~900-character risk **disclaimer that is longer than the real
+  "About" text**, so longest-paragraph picks the wrong one (`BOILERPLATE` filters it); and every
+  product slide has 2-column **Top Holdings / Top Sectors** tables, so taking all 2-column tables
+  turned an 11-row fact card into a 35-row dump of stock weights (only the table headed
+  `Particulars` / `Fund Structure` / `Details` counts).
+- Every key must exist in `MASTER` or the badge can never render — that is the write gate. The
+  August run also cleared the two pre-existing orphans (`Alchemy India Long Term Fund` was missing
+  its ` (Inbound)` suffix; `Motilal Oswal Alternative Investment` has no MASTER record at all).
+
+**Deck products with no MASTER instrument** — the badge has nothing to attach to, so they are
+skipped and reported. Adding them is a universe change, not a refresh:
+`Alf Accurate Budding Beasts PMS` (MASTER has AlfAccurate *India Opportunities*, a different
+strategy), `Motilal Oswal Gift City India Equity Fund`, `Carnelian Private Growth & Innovation
+Fund`, `Inquant Debt Plus Fund`.
+
+---
+
 ## Verifying
 
 Re-derive the counts rather than trusting any document (including this one). A faithful check runs
@@ -466,9 +613,11 @@ the page's scripts in document order in a Node `vm` sandbox with a `window`/`doc
 reproduces the true browser state including all five sibling mutations. Expected results:
 
 ```
-MASTER baseline 7452  →  effective 7460
+MASTER baseline 7599  →  effective 7607
 EQUITY_ANALYTICS 1110 →  effective 1138      RISK_MATRIX 1088
-CENTRICITY_SELECT 149     PMS_AIF_TERMS 73    EXTRA_SLIDES 9 images (3 dividers + 5 market + thankyou)
+CENTRICITY_SELECT 178     PMS_AIF_TERMS 73    EXTRA_SLIDES 9 images (3 dividers + 5 market + thankyou)
+PMS_PERFORMANCE.pms 690   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
+HYBRID_ANALYTICS 246 (July workbook covers 241)   DEBT_ANALYTICS 495
 0 duplicate names         file ends </body></html>
 ```
 
