@@ -64,6 +64,7 @@ Do not re-add a script tag for it without first checking the inline block would 
 | `merge_analytics.js` | LIVE — re-bakes ONE analytics class; `bake_month.js` does all three plus the monitor |
 | `rekey_sif_analytics.js` | LIVE — **required after every analytics bake**; see *SIF analytics are keyed differently* |
 | `merge_pms_aif_analytics.js` | LIVE — PMS/AIF equity look-through; **writes the sibling too** |
+| `merge_aif_performance.js` | LIVE — AIF performance + benchmarks, parsed out of the Reckoner deck |
 | `blocklib.js` | LIVE — brace-matching splicer; **every merge_*.js tool requires it** |
 | `verify_page.js` | LIVE — runs the page in a Node `vm` and prints the true in-browser counts |
 | `*_Build_Prompt.md` | Historical build specs, reference only |
@@ -549,7 +550,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | Equity/Hybrid/Debt Analytics | `<Class> Analytics_<Month>.xlsx` | monthly | 30 Jun 2026 |
 | PMS/AIF look-through | `PMS & AIF Analytics <Month Year>.xlsx` (Desktop root) | monthly | 31 Jul 2026 |
 | PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` | monthly | 31 Jul 2026 |
-| AIF performance + benchmarks | *no recurring source* | frozen | May 2026 |
+| AIF performance + benchmarks | the Reckoner deck itself → `merge_aif_performance.js` | monthly | 31 Jul 2026 |
 | Direct Equity | `Listed Direct Equity_<Month>.xlsx` | monthly | 28 Jul 2026 |
 | Bonds | `Bond List_<date>.xlsx` → `merge_bond_list.js` | periodic | Invictus 6 Aug 2026; OneDigital older |
 | GIFT City / Offshore | `Gift City Master List.xlsx` | periodic | Jun 2026 (sibling) |
@@ -585,8 +586,8 @@ All four are dry-run by default; add `--apply` to write. Gates refuse to write o
 ### PMS performance
 
 `PMS_PERFORMANCE.pms` is **replaced wholesale**; `aif` and `benchmarks` are carried forward
-verbatim — **this file is PMS-only and cannot update AIF**, which has no recurring source and is
-frozen at May 2026.
+verbatim — **this file is PMS-only and cannot update AIF**. AIF comes from the deck instead; see
+*AIF performance* below.
 
 - **The vendor renames schemes.** July 2026 arrived with only 118 of 314 old keys intact
   (`ICICI - Value Strategy` → `ICICI Prudential - Value Portfolio`). That silently broke 9 alias
@@ -602,6 +603,35 @@ frozen at May 2026.
 
 Four pins are still `null` because the file genuinely has no counterpart: Burman Capital,
 Phillip Conservative Credit, Sundaram F.I.R.S.T. Debt, Julius Baer Premier Focused.
+
+### AIF performance
+
+AIF had no recurring workbook and sat frozen at May 2026. It does have a source: the deck's own
+**"AIF PERFORMANCE (CAT III) – LISTED EQUITY"** slide, which is a full performance grid —
+`Strategy | Inception Date | AUM (Cr) | 1M | 3M | 6M | 1Y | 3Y | 5Y | SI | Large | Mid | Small |
+Cash & Others` — on the deck's own as-on date.
+
+```bash
+node merge_aif_performance.js "<Monthly Investment Reckoner - <Month Year>.pptx>" --apply
+```
+
+- `pms` is carried forward untouched; `merge_pms_performance.js` owns that half.
+- **The AIF grid has no 2Y column**, so `benchmarks` is taken from the **PMS – EQUITY** grid, which
+  carries all four indices *with* 2Y on the same as-on date and agrees with the AIF grid's other
+  columns to the rounding the deck prints. Do not source benchmarks from the AIF slide alone.
+- The deck writes 2-digit years (`03-Dec-25`); all are 20xx. `inception` is stored as `"Dec, 2025"`
+  with `inception_full` as an ISO first-of-month, matching the existing records.
+- Deck rows are footnoted with `*` when a different series is being shown — `Motilal Oswal Founders
+  Fund*` is Series VII (inception Dec-25), not the Series I that the May block carried. The numbers
+  are *supposed* to move a long way.
+- **A market-allocation bucket left blank does not get back-filled.** Singularity Equity Fund I has
+  an empty `Small` cell and sums to 93.8%; spreading the residual into Cash & Others would put a
+  fabricated number on a client-facing allocation. The gate fails only when a split exceeds 100%
+  (which means the columns were misread) and merely reports a shortfall.
+
+**Where the deck prints "-", MASTER keeps the IRR-band midpoint** that the embedded record already
+carried (17-19% → 18.0%, 20-22% → 21.0%). That is the pre-existing convention for AIF and unlisted
+records, not a value this tool writes — it only touches `PMS_PERFORMANCE`, never a MASTER record.
 
 ### Centricity Select
 
@@ -668,7 +698,8 @@ Skip the `React is not defined` errors from the UI blocks — expected without a
 2. Reconcile or rewrite `README.md` — confirm where, or whether, the git repo and build scripts live.
 3. Decide `Centricity_Dashboard.html`'s fate: retire it or resume syncing.
 4. Archive `*.bak_*` older than ~60 days out of OneDrive.
-5. Re-establish a recurring AIF performance + benchmarks source (frozen at May 2026).
+5. ~~Re-establish a recurring AIF performance + benchmarks source.~~ Done 20-Aug-2026 — the
+   Reckoner deck carries it; see *AIF performance*.
 6. Set the SIF performance as-on date (`DATA_DATES.sif` is `—`).
 7. `Risk_Matrix_Update_Prompt.md` flags: re-confirm Rf = 4.5% is still the desk convention
    (91-day T-Bill is ~5.26%).
