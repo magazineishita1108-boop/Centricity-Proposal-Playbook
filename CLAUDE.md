@@ -65,6 +65,7 @@ Do not re-add a script tag for it without first checking the inline block would 
 | `rekey_sif_analytics.js` | LIVE — **required after every analytics bake**; see *SIF analytics are keyed differently* |
 | `merge_pms_aif_analytics.js` | LIVE — PMS/AIF equity look-through; **writes the sibling too** |
 | `merge_aif_performance.js` | LIVE — AIF performance + benchmarks, parsed out of the Reckoner deck |
+| `fold_index_funds.js` | LIVE — one-off/idempotent: Index Fund → a sub-category of Mutual Fund |
 | `blocklib.js` | LIVE — brace-matching splicer; **every merge_*.js tool requires it** |
 | `verify_page.js` | LIVE — runs the page in a Node `vm` and prints the true in-browser counts |
 | `*_Build_Prompt.md` | Historical build specs, reference only |
@@ -107,7 +108,8 @@ uploader / add-fund handlers**, not data blocks. Only L1031 is the baseline.
 
 ### Effective in-browser universe (after all five siblings run): **7,607**
 
-Direct Equity 5,353 · Bonds 50 (Invictus 36 · OneDigital 14) · SIF 28 · the rest as before.
+Direct Equity 5,353 · Bonds 50 (Invictus 36 · OneDigital 14) · SIF 28 · Mutual Fund 1,744
+(522 of them Index Fund, folded in 21-Aug-2026) · ETF 252 · the rest as before.
 
 `EQUITY_ANALYTICS` 1,155 · `HYBRID_ANALYTICS` 246 · `DEBT_ANALYTICS` 495 · `DIRECT_PERF` 1,676 ·
 `MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
@@ -159,6 +161,29 @@ Refresh, `main.col-main` with sections 1-6 plus the Master Editor, and a right-h
 
 ---
 ## Traps
+
+**Index Fund is a SUB-CATEGORY of Mutual Fund, not a product class** (21-Aug-2026). The 522
+index funds carry `product_class: "Mutual Fund"`, `sub_category: "Index Fund"`, so they sit beside
+Flexi Cap and Mid Cap in the taxonomy tree, the proposal table, the Portfolio Roll-Up, the exports
+and the allocation sheet alike. Before this they were their own `product_class` and only
+`H.displayPC` nested them — which fixed the tree and nothing else.
+
+Three places make it stick; miss any one and it half-reverts:
+
+| | |
+|---|---|
+| `SHEET_MAP['Index']` | `['Equity', 'Mutual Fund', 'Index Fund']` — a new fund off the Monitor's *Index* sheet must be filed like one off *Flexi Cap Fund*, or the next upload re-creates the old bucket |
+| `H.fofUnderlyingName` | its candidate pool matches index funds on **`sub_category`**; testing `product_class` would empty it of all 522 |
+| `PC_ORDER` | "Index Fund" removed |
+
+`H.displayPC` is now a plain accessor. `DEFAULT_STRATEGIES`, `LIQUIDITY_MAP` and the scope gates
+still carry harmless `'Index Fund'` keys whose values are identical to the `'Mutual Fund'` ones —
+left as defensive fallbacks, not live paths. The monthly tools all test
+`['Mutual Fund','Index Fund','ETF'].includes(...)`, which still matches. Rerun
+`node fold_index_funds.js --apply` (idempotent) if a stray record ever reappears.
+
+**ETF remains a separate product class** (252 records) and was not touched. 257 of the folded
+records are named "…ETF" but were filed as index funds upstream — that pre-dates this change.
 
 **`product_class: "Mutual Funds"` (plural) is deliberate — do not "fix" it.** All 67 such records are
 `asset_class: "Global Funds", sub_category: "International"`. It is a real marker for international
