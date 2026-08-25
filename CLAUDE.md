@@ -66,6 +66,7 @@ Do not re-add a script tag for it without first checking the inline block would 
 | `merge_pms_aif_analytics.js` | LIVE — PMS/AIF equity look-through; **writes the sibling too** |
 | `merge_aif_performance.js` | LIVE — AIF performance + benchmarks, parsed out of the Reckoner deck |
 | `fold_index_funds.js` | LIVE — one-off/idempotent: Index Fund → a sub-category of Mutual Fund |
+| `split_sif_add_mld.js` | LIVE — one-off/idempotent: SIF split by strategy + the MLD product class |
 | `blocklib.js` | LIVE — brace-matching splicer; **every merge_*.js tool requires it** |
 | `verify_page.js` | LIVE — runs the page in a Node `vm` and prints the true in-browser counts |
 | `*_Build_Prompt.md` | Historical build specs, reference only |
@@ -106,9 +107,9 @@ Line numbers below are as of 28-Jul-2026 and **drift with every edit** — re-de
 `window.MASTER` is also assigned at L2629, L2829, L2949, L7593–94, L7629–30 — those are **runtime
 uploader / add-fund handlers**, not data blocks. Only L1031 is the baseline.
 
-### Effective in-browser universe (after all five siblings run): **7,607**
+### Effective in-browser universe (after all five siblings run): **7,608**
 
-Direct Equity 5,353 · Bonds 50 (Invictus 36 · OneDigital 14) · SIF 28 · Mutual Fund 1,744
+Direct Equity 5,353 · Bonds 50 (Invictus 36 · OneDigital 14) · MLD 1 · Equity SIF 15 · Hybrid SIF 13 · Mutual Fund 1,744
 (522 of them Index Fund, folded in 21-Aug-2026) · ETF 252 · the rest as before.
 
 `EQUITY_ANALYTICS` 1,155 · `HYBRID_ANALYTICS` 246 · `DEBT_ANALYTICS` 495 · `DIRECT_PERF` 1,676 ·
@@ -161,6 +162,27 @@ Refresh, `main.col-main` with sections 1-6 plus the Master Editor, and a right-h
 
 ---
 ## Traps
+
+**SIF is split by strategy into TWO product classes** (21-Aug-2026): `Equity SIF` (15, asset_class
+Equity — Equity Long-Short, Equity Ex-Top 100, Sector Rotation) and `Hybrid SIF` (13, asset_class
+Hybrid — Hybrid Long-Short, Active Asset Allocator). The strategy exists only in the scheme name,
+so `split_sif_add_mld.js` reads it from there and refuses to guess.
+
+**The split lives in `Centricity_SIF_Refresh.js`, not the embedded block.** The sibling deletes
+every SIF row and concatenates its own hard-coded array of 28 on each load, so that array is the
+one that matters. The 12 legacy `product_class: SIF` rows still in `index.html` are deliberately
+left unclassified — they share no name with the sibling's 28 (three are not even SIFs: the two
+Kotak Optimus hybrid AIFs and ASK Absolute Return), and the sibling's delete filter finds them by
+that exact class. Reclassify them and they escape the filter and duplicate the whole bucket.
+
+`H.isHybridScheme` now accepts `Hybrid SIF`; `H.isEquitySIF` sends the equity ones down the
+equity path instead. Both scope gates and both aggregators go through those two predicates —
+keep it that way. The sibling's delete filter and `parseSif`, plus `rekey_sif_analytics.js`,
+all match `/SIF$/` so they cover both classes and anything predating the split.
+
+**MLD is a Debt product class** with one instrument (Neo Market Services Limited, IRR 10-12%,
+close ended to Aug-2029). Tenure resolves via an explicit `pc === 'MLD'` case that must come
+*before* the asset-class branches in the tenure function.
 
 **Index Fund is a SUB-CATEGORY of Mutual Fund, not a product class** (21-Aug-2026). The 522
 index funds carry `product_class: "Mutual Fund"`, `sub_category: "Index Fund"`, so they sit beside

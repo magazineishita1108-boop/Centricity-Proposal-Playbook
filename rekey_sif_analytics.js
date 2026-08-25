@@ -55,7 +55,8 @@ for (const f of ['Centricity_June_Refresh.js', 'Centricity_IRR_Offshore.js', 'Ce
   try { vm.runInContext(fs.readFileSync(p, 'utf8'), sandbox, { filename: f }); }
   catch (e) { console.error('*** ' + f + ': ' + e.message); process.exit(1); }
 }
-const sif = sandbox.MASTER.filter(r => r.product_class === 'SIF');
+// "Equity SIF" and "Hybrid SIF" since the strategy split; "SIF" for anything predating it.
+const sif = sandbox.MASTER.filter(r => /SIF$/.test(r.product_class || ''));
 console.log('SIF funds after the siblings run: ' + sif.length +
   '   (carrying sif_raw: ' + sif.filter(r => r.sif_raw).length + ')\n');
 
