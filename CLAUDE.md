@@ -67,6 +67,7 @@ Do not re-add a script tag for it without first checking the inline block would 
 | `merge_aif_performance.js` | LIVE — AIF performance + benchmarks, parsed out of the Reckoner deck |
 | `fold_index_funds.js` | LIVE — one-off/idempotent: Index Fund → a sub-category of Mutual Fund |
 | `split_sif_add_mld.js` | LIVE — one-off/idempotent: SIF split by strategy + the MLD product class |
+| `update_closing_slides.js` | LIVE — re-renders the Disclaimer / Thank You slides into `EXTRA_SLIDES` |
 | `blocklib.js` | LIVE — brace-matching splicer; **every merge_*.js tool requires it** |
 | `verify_page.js` | LIVE — runs the page in a Node `vm` and prints the true in-browser counts |
 | `*_Build_Prompt.md` | Historical build specs, reference only |
@@ -282,6 +283,53 @@ paths and uploaders don't. Confirm on load: universe reads **7460 instruments** 
 clean. Needs internet for the five CDN libraries.
 
 ---
+
+## The deck logo goes on EVERY slide
+
+Whatever the user picks in the header switcher (Centricity / Invictus / OneDigital / an uploaded
+file) reaches the export as `window.__SELECTED_LOGO`, and `stampLogo` puts it on every slide —
+native *and* full-bleed image ones. Two boxes, defined once:
+
+| | |
+|---|---|
+| `LOGO_HEADER` | `x 11.21, y 0.22, w 2.02, h 0.44` — the house position, used by `applyMaster` and by every image slide |
+| `LOGO_CLOSING` | `x 8.47, y 4.33, w 4.06, h 0.89` — the larger slot the Thank You slide's own design uses; same 4.6:1 aspect, so one image serves both |
+
+**No slide image may carry a baked-in logo any more**, or the deck double-stamps. The Disclaimer
+and Thank You renders have their logo picture shape deleted before export (see below); the
+dividers and Market Update slides never had one — their top-right is empty by design.
+
+**`forEach(imgSlide)` is a trap.** `forEach` passes *(value, index, array)*, and `imgSlide`'s
+second parameter is the logo box, so the index lands there as a bogus box and the logo silently
+vanishes. Only `market[0]` survived, because index 0 is falsy and fell back to the default. Always
+wrap: `(ES.market || []).forEach(img => imgSlide(img))`.
+
+Verify by geometry, not by data: PptxGenJS rewrites `obj.image` to `"preencoded.png"`, so compare
+each image object's `options` box against the two constants. Intercept `PptxGenJS.prototype.writeFile`
+to capture the built deck — do **not** wait on `write('base64')`, which stalls forever on a hidden
+page. `window.EXPORTS.exportPpt(selected, corpus, unit)` drives a build directly, which avoids
+needing 100% allocated to enable the toolbar button.
+
+## Refreshing the closing slides (Disclaimer / Thank You)
+
+Same story as the Market Update deck — native shapes, `ppt/media` holds only the photo, so the
+slides must be **rendered**:
+
+```powershell
+$sh.Delete()   # every type-13 picture narrower than 400pt = the logo; and the slide-number placeholder
+$pres.Slides.Item($i).Export($path, "PNG", 2001, 1125)
+```
+
+```bash
+node update_closing_slides.js --dir "<render dir>" --apply
+```
+
+- **2001 x 1125**, like every other image in `EXTRA_SLIDES`; the tool gates on it.
+- **PNG for the Disclaimer** (text-heavy — crisper *and* smaller here: 288 KB vs 343 KB JPEG),
+  **JPEG for the Thank You** (photographic — 96 KB vs 250 KB PNG).
+- Delete the source deck's own slide-number placeholder too, or a stray "1" shows mid-proposal.
+- The tool refuses to write unless `marketDivider`, `portfolioDivider`, `annexureDivider` and all
+  five `market` images come through untouched.
 
 ## Refreshing the Market Update slides
 
@@ -736,7 +784,7 @@ reproduces the true browser state including all five sibling mutations. Expected
 ```
 MASTER baseline 7599  →  effective 7607
 EQUITY_ANALYTICS 1110 →  effective 1138      RISK_MATRIX 1088
-CENTRICITY_SELECT 178     PMS_AIF_TERMS 73    EXTRA_SLIDES 9 images (3 dividers + 5 market + thankyou)
+CENTRICITY_SELECT 178     PMS_AIF_TERMS 73    EXTRA_SLIDES 10 images (3 dividers + 5 market + disclaimer + thankyou)
 PMS_PERFORMANCE.pms 690   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
 HYBRID_ANALYTICS 246 (July workbook covers 241)   DEBT_ANALYTICS 495
 0 duplicate names         file ends </body></html>

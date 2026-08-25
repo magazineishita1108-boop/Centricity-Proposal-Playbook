@@ -4030,6 +4030,18 @@ window.mfBenchmarkPerfFor = function(sub) {
     valGridLine: { style: "none" }, catGridLine: { style: "none" },
   };
 
+  // The one place the logo box is defined. LOGO_HEADER is the house position used by every
+  // content slide and by the full-bleed image slides, which carry no logo of their own — the
+  // Disclaimer and Thank You renders have theirs deleted before export, and the dividers and
+  // Market Update slides never had one. LOGO_CLOSING is the larger slot the Thank You slide's
+  // own design puts it in; same 4.6:1 aspect, so one image serves both.
+  const LOGO_HEADER = { x: 11.21, y: 0.22, w: 2.02, h: 0.44 };
+  const LOGO_CLOSING = { x: 8.47, y: 4.33, w: 4.06, h: 0.89 };
+  function stampLogo(slide, logoData, box) {
+    if (!logoData) return;
+    slide.addImage(Object.assign({ data: logoData }, box || LOGO_HEADER));
+  }
+
   function applyMaster(slide, title, logoData) {
     // Black header
     slide.addShape("rect", {x:0, y:0, w:13.333, h:0.90, fill:{color:COL.black}, line:{color:COL.black}});
@@ -4038,7 +4050,7 @@ window.mfBenchmarkPerfFor = function(sub) {
     // Title
     slide.addText(title.toUpperCase(), {x:0.15, y:0.15, w:11.0, h:0.69, fontFace:"Cambria", fontSize:22, bold:true, color:COL.white});
     // Logo
-    if (logoData) slide.addImage({data: logoData, x:11.21, y:0.22, w:2.02, h:0.44});
+    stampLogo(slide, logoData);
     // Footer — gold separator line only (no confidentiality text per spec)
     slide.addShape("rect", {x:0, y:7.40, w:13.333, h:0.04, fill:{color:COL.gold}, line:{color:COL.gold}});
   }
@@ -4084,20 +4096,30 @@ window.mfBenchmarkPerfFor = function(sub) {
     // full-bleed images in Centricity_ExtraSlides.js. imgSlide adds one as a full slide;
     // titledDivider is the native fallback if the sibling file isn't loaded.
     const ES = window.EXTRA_SLIDES || {};
-    const imgSlide = (data) => { if (!data) return; const s = pptx.addSlide(); s.addImage({ data: data, x: 0, y: 0, w: 13.333, h: 7.5 }); };
-    const titledDivider = (title) => { const s = pptx.addSlide(); applyDividerMaster(s); s.addText(title, { x: 5.1, y: 2.65, w: 7.5, h: 0.9, fontFace: "Cambria", fontSize: 50, bold: true, color: COL.black }); };
+    // Every image slide gets the selected logo stamped on top, so one choice in the header
+    // switcher brands the whole deck — image slides included, not just the native ones.
+    const imgSlide = (data, logoBox) => {
+      if (!data) return;
+      const s = pptx.addSlide();
+      s.addImage({ data: data, x: 0, y: 0, w: 13.333, h: 7.5 });
+      stampLogo(s, logoData, logoBox);
+    };
+    const titledDivider = (title) => { const s = pptx.addSlide(); applyDividerMaster(s); stampLogo(s, logoData); s.addText(title, { x: 5.1, y: 2.65, w: 7.5, h: 0.9, fontFace: "Cambria", fontSize: 50, bold: true, color: COL.black }); };
 
     // -- Slide 1: Cover --
     if (!only) {
       const s = pptx.addSlide();
       applyDividerMaster(s);
+      stampLogo(s, logoData);
       s.addText("Investment Proposal", {x:5.1, y:3.30, w:7.5, h:0.9, fontFace:"Cambria", fontSize:44, bold:true, color:COL.black});
     }
 
     // -- Market Update section (uploaded slides) — placed just before Portfolio Construct --
     if (!only) {
       if (ES.marketDivider) imgSlide(ES.marketDivider); else titledDivider("Market Update");
-      (ES.market || []).forEach(imgSlide);
+      // Wrapped, not passed by reference: forEach hands the callback (value, index, array), and
+      // imgSlide's second parameter is the logo box — the index would land there as a bogus box.
+      (ES.market || []).forEach(img => imgSlide(img));
       if (ES.portfolioDivider) imgSlide(ES.portfolioDivider); else titledDivider("Investment Options");
     }
 
@@ -4876,10 +4898,11 @@ window.mfBenchmarkPerfFor = function(sub) {
       }
     }
 
-    // -- Final slide: Thank You & Disclaimer (uploaded slide, native fallback) --
+    // -- Closing: Disclaimer then Thank You (uploaded slides, native fallback) --
     if (!only) {
+      if (ES.disclaimer) imgSlide(ES.disclaimer);
       if (ES.thankyou) {
-        imgSlide(ES.thankyou);
+        imgSlide(ES.thankyou, LOGO_CLOSING);
       } else {
         const s = pptx.addSlide();
         applyMaster(s, "Important Disclaimer", logoData);
