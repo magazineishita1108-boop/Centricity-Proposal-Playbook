@@ -46,7 +46,10 @@ const MLD = {
   r10y: null, si: null, expense: null, inception: null, fund_mgr: null,
   exit_load: 'Close Ended; Hold Till Maturity (Aug-2029)',
   mcap_large: null, mcap_mid: null, mcap_small: null, mcap_other: null,
-  ytm: null, avg_maturity: null, mod_duration: null, bond_issuer: null, bond_rating: null,
+  ytm: null, avg_maturity: null, mod_duration: null,
+  // An MLD is a single instrument, so like a bond it carries its own issuer and rating on the
+  // record rather than a holdings look-through. The debt analytics read these two fields directly.
+  bond_issuer: 'Neo', bond_rating: 'Unrated',
 };
 
 function reclass(list, label) {
@@ -80,9 +83,18 @@ const baseRes = { out: MASTER, stuck: [] };
 let next = baseRes.out;
 
 // ---------- 2. MLD ----------
+// Upsert rather than skip, so re-running also repairs a record whose fields have drifted.
 const hasMld = next.some(r => r.name === MLD.name);
-if (hasMld) console.log('\nMLD: "' + MLD.name + '" already present');
-else { next = next.concat([MLD]); console.log('\nMLD: adding "' + MLD.name + '"  Debt / MLD  IRR 10%-12%  ' + MLD.exit_load); }
+if (hasMld) {
+  const before = next.find(r => r.name === MLD.name);
+  const changed = Object.keys(MLD).filter(k => JSON.stringify(before[k]) !== JSON.stringify(MLD[k]));
+  next = next.map(r => r.name === MLD.name ? Object.assign({}, r, MLD) : r);
+  console.log('\nMLD: "' + MLD.name + '" present' +
+    (changed.length ? ' — updating ' + changed.map(k => k + ' ' + JSON.stringify(before[k]) + '->' + JSON.stringify(MLD[k])).join(', ') : ' and unchanged'));
+} else {
+  next = next.concat([MLD]);
+  console.log('\nMLD: adding "' + MLD.name + '"  Debt / MLD  IRR 10%-12%  ' + MLD.exit_load);
+}
 
 // ---------- 1b. the sibling ----------
 const sibSrc = fs.readFileSync(SIB, 'utf8');

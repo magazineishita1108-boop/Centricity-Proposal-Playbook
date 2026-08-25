@@ -184,6 +184,13 @@ all match `/SIF$/` so they cover both classes and anything predating the split.
 close ended to Aug-2029). Tenure resolves via an explicit `pc === 'MLD'` case that must come
 *before* the asset-class branches in the tenure function.
 
+**An MLD is its own holding, like a bond.** `H.isSelfDescribingDebt` (Bonds + MLD) is what both
+the debt scope gate and the debt aggregator test, so the chip list can never disagree with what is
+aggregated. The look-through reads `bond_issuer` / `bond_rating` straight off the record — Neo is
+stored as issuer "Neo", rating "Unrated" — and MLDs get their own `MLD` sector bucket rather than
+being folded into "Direct Bonds". **A missing rating on an MLD defaults to "Unrated", not to the
+bond desk's "AAA & Equiv"**, which would otherwise overstate portfolio credit quality.
+
 **Index Fund is a SUB-CATEGORY of Mutual Fund, not a product class** (21-Aug-2026). The 522
 index funds carry `product_class: "Mutual Fund"`, `sub_category: "Index Fund"`, so they sit beside
 Flexi Cap and Mid Cap in the taxonomy tree, the proposal table, the Portfolio Roll-Up, the exports
