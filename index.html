@@ -5108,12 +5108,17 @@ const TreeNode = React.memo(function TreeNode({
   node,
   level,
   currentPath,
+  names,
   expanded,
   onToggle,
   onSelect,
   search
 }) {
   const path = currentPath + "/" + node.name;
+  // The real ancestor names, carried down rather than re-derived from `path`. Taxonomy names
+  // legitimately contain slashes ("REIT/InvIT", "Value / Contra"), so splitting the path yields
+  // extra segments and a filter that matches nothing.
+  const chain = (names || []).concat([node.name]);
   const hasChildren = node.children && node.children.length > 0;
   const isActive = expanded[path] && expanded[path].active;
   const isOpen = expanded[path] && expanded[path].open;
@@ -5131,7 +5136,7 @@ const TreeNode = React.memo(function TreeNode({
   }
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "tree-node lvl" + level + " " + (isActive ? "active" : "") + " " + (isOpen ? "expanded" : ""),
-    onClick: () => onSelect(path, node, level)
+    onClick: () => onSelect(path, node, level, chain)
   }, hasChildren && /*#__PURE__*/React.createElement("span", {
     className: "caret",
     onClick: e => {
@@ -5151,6 +5156,7 @@ const TreeNode = React.memo(function TreeNode({
     node: c,
     level: level + 1,
     currentPath: path,
+    names: chain,
     expanded: expanded,
     onToggle: onToggle,
     onSelect: onSelect,
@@ -5404,8 +5410,9 @@ function PickFundsPane({
       })
     }));
   };
-  const onSelect = (p, node, level) => {
-    const parts = p.split("/").slice(1);
+  const onSelect = (p, node, level, chain) => {
+    // `chain` holds the real ancestor names; the slash-joined path is only a React/expansion key.
+    const parts = chain || p.split("/").slice(1);
     const f = {};
     if (level >= 1) f.ac = parts[0];
     if (level >= 2) f.pc = parts[1];
@@ -5421,9 +5428,8 @@ function PickFundsPane({
         active: true,
         open: true
       });
-      const segs = p.split("/").filter(Boolean);
       let cum = "";
-      for (const s of segs) {
+      for (const s of parts) {
         cum += "/" + s;
         ne[cum] = Object.assign({}, ne[cum] || {}, {
           open: true

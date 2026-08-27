@@ -164,6 +164,19 @@ Refresh, `main.col-main` with sections 1-6 plus the Master Editor, and a right-h
 ---
 ## Traps
 
+**A taxonomy name may contain "/" — never rebuild the filter by splitting the tree path.**
+`TreeNode` keys itself by `currentPath + "/" + node.name`, and `onSelect` used to recover the
+(asset class, product class, sub-category) triple with `path.split("/")`. Two live names break
+that: **`REIT/InvIT`** and **`Value / Contra`**. Selecting the REIT/InvIT leaf produced
+`ac="REIT", pc="InvIT", sc="REIT"`, a filter matching nothing, and the pane read *"No funds match"*
+under a node whose own count said 1 — the breadcrumb showing `REIT › InvIT › REIT` is the tell.
+`Value / Contra` (26 funds) was hit the same way.
+
+`TreeNode` now carries a `names` array down the recursion and hands `onSelect` the real ancestor
+chain; the slash-joined path stays, but only as the React key and the expand/collapse key. Adding
+any instrument whose asset class contains a slash exercises this — that is how it surfaced.
+
+
 **SIF is split by strategy into TWO product classes** (21-Aug-2026): `Equity SIF` (15, asset_class
 Equity — Equity Long-Short, Equity Ex-Top 100, Sector Rotation) and `Hybrid SIF` (13, asset_class
 Hybrid — Hybrid Long-Short, Active Asset Allocator). The strategy exists only in the scheme name,
