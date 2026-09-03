@@ -199,7 +199,7 @@ close ended to Aug-2029). Tenure resolves via an explicit `pc === 'MLD'` case th
 *before* the asset-class branches in the tenure function.
 
 **Credit rating is a fixed six-bucket vocabulary** (03-Sep-2026), in this display order:
-`SOV`, `AAA/A1+`, `AA+`, `AA & Below`, `Cash & Equivalents`, `Unrated`. The holdings data carries
+`SOV`, `AAA/A1+`, `AA+`, `AA & Below`, `Cash & Equivalents`, `Unrated`, `Others`. The holdings data carries
 **27 distinct rating strings**; `H.creditBucket` maps every one to exactly one bucket, so the
 distribution can never sprout an unexpected slice:
 
@@ -210,12 +210,18 @@ distribution can never sprout an unexpected slice:
 | AA+ | `AA+`, `AA+(SO)` |
 | AA & Below | `AA`, `AA-`, `AA(CE)`, `AA(SO)`, `AA-(IND)`, `A`, `A+`, `A-`, `A(CE)`, `A+(CE)`, `BBB+`, `D` |
 | Cash & Equivalents | `Cash & Equivalent`, `Deposits`, **`Mutual Fund Units`**, TREPS / Repo / Net Current Asset |
-| Unrated | `UNRATED`, and the non-ratings that appear in a hybrid's debt sleeve — `Equity`, `Derivatives`, `REITs & InvITs` |
+| Unrated | `UNRATED`, `NOT RATED`, `NR`, and a blank rating |
+| Others | the non-ratings that appear in a hybrid's debt sleeve — `Equity`, `Derivatives`, `REITs & InvITs` — plus any new string the source starts sending |
 
 The `(SO)` / `(CE)` / `(IND)` suffixes are stripped before matching — they say how a rating was
 arrived at, not which rung it sits on. **`AAA` and `A1+` must be tested before the `AA|A|…`
 catch-all**, or every AAA falls into "AA & Below". Note "mutual fund units" arrives as a *rating*
 value, not an issuer-name pattern — matching on the issuer name finds nothing.
+
+**`Unrated` and `Others` mean different things and must not be merged.** Unrated is debt that
+carries credit risk but has no rating; Others is not debt at all (equity, derivatives,
+REITs/InvITs), where a credit rating is not a meaningful idea. An unrecognised new string falls to
+Others, not Unrated, so `Unrated` keeps meaning what it says. A *blank* rating still means Unrated.
 
 Both `aggDebtScoped` and the legacy `aggDebt` call the same helper. `aggDebt` sits in the pre-`H`
 closure so it reaches it via `window.H`; keep them in step rather than re-inlining the mapping.

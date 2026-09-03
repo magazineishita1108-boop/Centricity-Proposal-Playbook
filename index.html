@@ -2094,10 +2094,14 @@ window.linkIdcwToGrowth();
   // scale), short-term grades (A1+), and several non-ratings ("Equity", "Derivatives",
   // "REITs & InvITs") that appear in the debt sleeve of hybrid schemes. Every one maps to exactly
   // one bucket here, so the distribution can never sprout an unexpected slice.
-  H.CREDIT_BUCKETS = ['SOV', 'AAA/A1+', 'AA+', 'AA & Below', 'Cash & Equivalents', 'Unrated'];
+  //
+  // "Unrated" and "Others" are deliberately separate: Unrated means the instrument carries debt
+  // credit risk that simply has no rating, while Others holds things that are not debt at all
+  // (equity, derivatives, REITs/InvITs) and for which a credit rating is not a meaningful idea.
+  H.CREDIT_BUCKETS = ['SOV', 'AAA/A1+', 'AA+', 'AA & Below', 'Cash & Equivalents', 'Unrated', 'Others'];
   H.creditBucket = function(raw) {
     const s = String(raw == null ? '' : raw).trim();
-    if (!s) return 'Unrated';
+    if (!s) return 'Unrated';   // a blank rating on a debt holding means unrated, not "other"
     // The agency suffix qualifies how a rating was arrived at, not which rung it sits on.
     const b = s.toUpperCase().replace(/\s*\((SO|CE|IND)\)\s*$/, '').replace(/\s+/g, ' ').trim();
     if (b === 'SOV' || b === 'SOVEREIGN' || b.indexOf('SOV ') === 0) return 'SOV';
@@ -2109,7 +2113,10 @@ window.linkIdcwToGrowth();
     if (b === 'AAA' || b === 'A1+' || b === 'AAA & EQUIV') return 'AAA/A1+';
     if (b === 'AA+') return 'AA+';
     if (/^(AA|A|BBB|BB|B|C|D)\b/.test(b) || /^(AA|A|BBB|BB|B|C|D)[-+]?$/.test(b)) return 'AA & Below';
-    return 'Unrated';   // UNRATED, Equity, Derivatives, REITs & InvITs, and anything new
+    if (b === 'UNRATED' || b === 'NOT RATED' || b === 'NR') return 'Unrated';
+    // Equity, Derivatives, REITs & InvITs — and any new non-rating string the source starts
+    // sending. Falling back to Others rather than Unrated keeps Unrated meaning what it says.
+    return 'Others';
   };
 
   // Debt instruments that ARE their own holding — the debt look-through reads bond_issuer and
