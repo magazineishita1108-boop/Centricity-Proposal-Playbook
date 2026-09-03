@@ -1685,7 +1685,11 @@ window.linkIdcwToGrowth();
   function aggDebt(selected, corpus) {
     const sector = {};
     const issuers = {}; // { name: { pct, rating } }
-    const rating = {"SOV (Govt)":0, "AAA & Equiv":0, "AA":0, "A":0, "Cash & Equivalent":0, "Others":0, "Unrated":0};
+    // This legacy aggregator sits in the pre-H closure, so it reaches the shared bucket helper
+    // through window.H. Kept in step with aggDebtScoped deliberately — two copies of one rule
+    // that can drift apart is how the SIF funds fell out of the analytics.
+    const CB = window.H.creditBucket;
+    const rating = {}; window.H.CREDIT_BUCKETS.forEach(function(b){ rating[b] = 0; });
     let debt_exposure = 0;
     for (const s of selected) {
       const A = corpus * s.pct / 100;
@@ -1696,28 +1700,28 @@ window.linkIdcwToGrowth();
         for (const [sec, v] of Object.entries(dbA.sector)) sector[sec] = (sector[sec]||0) + v/100 * A;
         for (const h of dbA.holdings) {
           const iss = parseIssuer(h.issuer);
-          const r = h.rating || "Unrated";
+          const r = CB(h.rating);
           issuers[iss] = issuers[iss] || {pct: 0, rating: r};
           issuers[iss].pct += h.pct/100 * A;
-          rating[r] = (rating[r]||0) + h.pct/100 * A;
+          rating[r] += h.pct/100 * A;
         }
         debt_exposure += A; // pure debt 100% of A
       } else if (hyA) {
         for (const [sec, v] of Object.entries(hyA.db_sector)) sector[sec] = (sector[sec]||0) + v/100 * A;
         for (const h of hyA.db_holdings) {
           const iss = parseIssuer(h.issuer);
-          const r = h.rating || "Unrated";
+          const r = CB(h.rating);
           issuers[iss] = issuers[iss] || {pct: 0, rating: r};
           issuers[iss].pct += h.pct/100 * A;
-          rating[r] = (rating[r]||0) + h.pct/100 * A;
+          rating[r] += h.pct/100 * A;
         }
         debt_exposure += hyA.db_total/100 * A;
       } else if (s.fund.product_class === "Bonds") {
         const iss = s.fund.bond_issuer || parseIssuer(s.fund.name);
-        const r = s.fund.bond_rating || "AAA & Equiv";
+        const r = CB(s.fund.bond_rating || "AAA & Equiv");
         issuers[iss] = issuers[iss] || {pct: 0, rating: r};
         issuers[iss].pct += A;
-        rating[r] = (rating[r]||0) + A;
+        rating[r] += A;
         sector["Direct Bonds"] = (sector["Direct Bonds"]||0) + A;
         debt_exposure += A;
       } else if (s.fund.product_class === "Fixed Deposit") {
@@ -2084,6 +2088,30 @@ window.linkIdcwToGrowth();
     const hyA = window.HYBRID_ANALYTICS[n];
     return !!(hyA && hyA.eq_stocks && hyA.eq_stocks.length);
   };
+  // ===== Credit-rating buckets for the debt look-through =====
+  // Fixed vocabulary, in display order. The holdings data carries 27 distinct rating strings —
+  // agency variants ((SO) structured obligation, (CE) credit enhancement, (IND) the India Ratings
+  // scale), short-term grades (A1+), and several non-ratings ("Equity", "Derivatives",
+  // "REITs & InvITs") that appear in the debt sleeve of hybrid schemes. Every one maps to exactly
+  // one bucket here, so the distribution can never sprout an unexpected slice.
+  H.CREDIT_BUCKETS = ['SOV', 'AAA/A1+', 'AA+', 'AA & Below', 'Cash & Equivalents', 'Unrated'];
+  H.creditBucket = function(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return 'Unrated';
+    // The agency suffix qualifies how a rating was arrived at, not which rung it sits on.
+    const b = s.toUpperCase().replace(/\s*\((SO|CE|IND)\)\s*$/, '').replace(/\s+/g, ' ').trim();
+    if (b === 'SOV' || b === 'SOVEREIGN' || b.indexOf('SOV ') === 0) return 'SOV';
+    // Cash, near-cash and MUTUAL FUND UNITS all sit in Cash & Equivalents.
+    if (b === 'CASH' || b === 'CASH & EQUIVALENT' || b === 'CASH & EQUIVALENTS' ||
+        b === 'DEPOSITS' || b === 'MUTUAL FUND UNITS' ||
+        /TREPS|REPO|NET CURRENT ASSET/.test(b)) return 'Cash & Equivalents';
+    // AAA and the top short-term grade A1+ share a bucket; test before the AA/A catch-all below.
+    if (b === 'AAA' || b === 'A1+' || b === 'AAA & EQUIV') return 'AAA/A1+';
+    if (b === 'AA+') return 'AA+';
+    if (/^(AA|A|BBB|BB|B|C|D)\b/.test(b) || /^(AA|A|BBB|BB|B|C|D)[-+]?$/.test(b)) return 'AA & Below';
+    return 'Unrated';   // UNRATED, Equity, Derivatives, REITs & InvITs, and anything new
+  };
+
   // Debt instruments that ARE their own holding — the debt look-through reads bond_issuer and
   // bond_rating straight off the record rather than looking for a holdings block. Shared by the
   // scope gate and the aggregator so the chip list can never disagree with what is aggregated.
@@ -2247,7 +2275,7 @@ window.linkIdcwToGrowth();
     exclude = exclude || window.__DB_EXCLUDE || null;
     const sector = {};
     const issuers = {};
-    const rating = {"SOV (Govt)":0, "AAA & Equiv":0, "AA":0, "A":0, "Cash & Equivalent":0, "Others":0, "Unrated":0};
+    const rating = {}; H.CREDIT_BUCKETS.forEach(function(b){ rating[b] = 0; });
     const db_skipped = [];   // in scope, but no holdings in the backend data
     let debt_exposure = 0;
     for (const s of selected) {
@@ -2277,20 +2305,20 @@ window.linkIdcwToGrowth();
         for (const [sec, v] of Object.entries(dbA.sector)) sector[sec] = (sector[sec]||0) + v/100 * A;
         for (const h of dbA.holdings) {
           const iss = H.parseIssuer(h.issuer);
-          const r = h.rating || "Unrated";
+          const r = H.creditBucket(h.rating);
           issuers[iss] = issuers[iss] || {pct:0, rating: r};
           issuers[iss].pct += h.pct/100 * A;
-          rating[r] = (rating[r]||0) + h.pct/100 * A;
+          rating[r] += h.pct/100 * A;
         }
         debt_exposure += A;
       } else if (hyA && isHybridMF) {
         for (const [sec, v] of Object.entries(hyA.db_sector)) sector[sec] = (sector[sec]||0) + v/100 * A;
         for (const h of hyA.db_holdings) {
           const iss = H.parseIssuer(h.issuer);
-          const r = h.rating || "Unrated";
+          const r = H.creditBucket(h.rating);
           issuers[iss] = issuers[iss] || {pct:0, rating: r};
           issuers[iss].pct += h.pct/100 * A;
-          rating[r] = (rating[r]||0) + h.pct/100 * A;
+          rating[r] += h.pct/100 * A;
         }
         debt_exposure += hyA.db_total/100 * A;
       } else if (isBond) {
@@ -2299,9 +2327,10 @@ window.linkIdcwToGrowth();
         // An MLD with no rating on the record is genuinely unrated — it must not inherit the
         // bond desk's "AAA & Equiv" default, which would overstate the portfolio's credit quality.
         const r = f.bond_rating || (isMld ? "Unrated" : "AAA & Equiv");
-        issuers[iss] = issuers[iss] || {pct:0, rating: r};
+        const rb = H.creditBucket(r);
+        issuers[iss] = issuers[iss] || {pct:0, rating: rb};
         issuers[iss].pct += A;
-        rating[r] = (rating[r]||0) + A;
+        rating[rb] += A;
         const bucket = isMld ? "MLD" : "Direct Bonds";
         sector[bucket] = (sector[bucket]||0) + A;
         debt_exposure += A;

@@ -198,6 +198,35 @@ all match `/SIF$/` so they cover both classes and anything predating the split.
 close ended to Aug-2029). Tenure resolves via an explicit `pc === 'MLD'` case that must come
 *before* the asset-class branches in the tenure function.
 
+**Credit rating is a fixed six-bucket vocabulary** (03-Sep-2026), in this display order:
+`SOV`, `AAA/A1+`, `AA+`, `AA & Below`, `Cash & Equivalents`, `Unrated`. The holdings data carries
+**27 distinct rating strings**; `H.creditBucket` maps every one to exactly one bucket, so the
+distribution can never sprout an unexpected slice:
+
+| bucket | raw strings it absorbs |
+|---|---|
+| SOV | `SOV` |
+| AAA/A1+ | `AAA`, `A1+`, `AAA(SO)`, `AAA(IND)`, `AAA(CE)`, `AAA & Equiv` |
+| AA+ | `AA+`, `AA+(SO)` |
+| AA & Below | `AA`, `AA-`, `AA(CE)`, `AA(SO)`, `AA-(IND)`, `A`, `A+`, `A-`, `A(CE)`, `A+(CE)`, `BBB+`, `D` |
+| Cash & Equivalents | `Cash & Equivalent`, `Deposits`, **`Mutual Fund Units`**, TREPS / Repo / Net Current Asset |
+| Unrated | `UNRATED`, and the non-ratings that appear in a hybrid's debt sleeve — `Equity`, `Derivatives`, `REITs & InvITs` |
+
+The `(SO)` / `(CE)` / `(IND)` suffixes are stripped before matching — they say how a rating was
+arrived at, not which rung it sits on. **`AAA` and `A1+` must be tested before the `AA|A|…`
+catch-all**, or every AAA falls into "AA & Below". Note "mutual fund units" arrives as a *rating*
+value, not an issuer-name pattern — matching on the issuer name finds nothing.
+
+Both `aggDebtScoped` and the legacy `aggDebt` call the same helper. `aggDebt` sits in the pre-`H`
+closure so it reaches it via `window.H`; keep them in step rather than re-inlining the mapping.
+
+**The rating chart does not sum to 100% for broad funds** — a pre-existing limit, not a bucketing
+bug. The analytics store keeps only each fund's **top 20 holdings** (264 of 495 debt funds have
+exactly 20), so a diversified corporate bond fund's twenty largest positions are ~43% of its
+portfolio and the distribution totals 43%. Concentrated funds are complete; the store's median
+holdings sum is 100%. Fixing it means either normalising the buckets to the covered portion or
+carrying more holdings per fund at bake time — a decision that changes a client-facing number.
+
 **An MLD is its own holding, like a bond.** `H.isSelfDescribingDebt` (Bonds + MLD) is what both
 the debt scope gate and the debt aggregator test, so the chip list can never disagree with what is
 aggregated. The look-through reads `bond_issuer` / `bond_rating` straight off the record — Neo is
