@@ -96,7 +96,7 @@ Line numbers below are as of 28-Jul-2026 and **drift with every edit** — re-de
 | L1045 | `DATA_DATES` (4 keys here; a 5th, `riskMatrix`, is added at L4192) |
 | L1043 / L1428 | `window.H` helpers + extensions |
 | L2161 | Risk profiles, strategy options, benchmark mapping |
-| L2194 | `PMS_PERFORMANCE` → `pms` 690 · `aif` 11 · `benchmarks` 4 |
+| L2194 | `PMS_PERFORMANCE` → `pms` 692 · `aif` 12 · `benchmarks` 4 |
 | L2401 | In-browser xlsx parsers (the Section 7 uploaders) |
 | L2971 | Excel + PowerPoint export |
 | L4189–4191 | siblings 3–5 |
@@ -704,6 +704,14 @@ All four are dry-run by default; add `--apply` to write. Gates refuse to write o
 verbatim — **this file is PMS-only and cannot update AIF**. AIF comes from the deck instead; see
 *AIF performance* below.
 
+- **The sheet is found by its HEADER, not its name.** The same 33-column layout has shipped as
+  `PMS Performance` and as a bare `Sheet1`; keying on the tab name yielded zero schemes and the
+  coverage gate was the only thing that stopped a 690-scheme wipe. `pickSheet` looks for the sheet
+  carrying `Scheme Name` + `Scheme Return 1 Year`.
+- **A scheme can appear twice — take the richer row, not the last.** The 03-Sep file lists
+  `Axis Pure Contra Portfolio` complete (21 fields, 1Y −3.39%) and again as a stub (6 fields, a
+  different AUM, no returns). Plain last-wins let the stub blank out real performance. The merge
+  now keeps whichever row has more populated fields and prints every collision it resolved.
 - **The vendor renames schemes.** July 2026 arrived with only 118 of 314 old keys intact
   (`ICICI - Value Strategy` → `ICICI Prudential - Value Portfolio`). That silently broke 9 alias
   pins. `PMS_PERF_ALIAS` is **maintained by hand, never guessed** — a wrong pin puts another
@@ -798,7 +806,7 @@ reproduces the true browser state including all five sibling mutations. Expected
 MASTER baseline 7599  →  effective 7607
 EQUITY_ANALYTICS 1110 →  effective 1138      RISK_MATRIX 1088
 CENTRICITY_SELECT 178     PMS_AIF_TERMS 73    EXTRA_SLIDES 10 images (3 dividers + 5 market + disclaimer + thankyou)
-PMS_PERFORMANCE.pms 690   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
+PMS_PERFORMANCE.pms 692   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
 HYBRID_ANALYTICS 246 (July workbook covers 241)   DEBT_ANALYTICS 495
 0 duplicate names         file ends </body></html>
 ```

@@ -31,6 +31,9 @@ const REPIN = {
   // previously pinned null because the scheme was absent; it is back this month
   'Neo Yield Enhancer':                      'Neo Yield Enhancer',
   'Abakkus Diversified Alpha Approach Portfolio': 'Abakkus Diversified Alpha Approach',
+  // The 03-Sep file drops the doubled apostrophe the vendor used to write ("India''s" -> "Indias").
+  // Same scheme, same manager — only the punctuation moved.
+  'Emkay Golden Decade PMS':                 'Emkay Investments - Indias Golden Decade of Growth',
 };
 // Left as null deliberately — see the report at the end of the run.
 const STILL_NULL_NOTES = {
@@ -80,7 +83,21 @@ function parseExitLoadText(txt) {
   return (a == null && b == null && c == null) ? null : mergeExitLoad(a, b, c);
 }
 
-const rows = XLSX.utils.sheet_to_json(XLSX.readFile(SRC).Sheets['PMS Performance'], { defval: null, raw: false });
+// Find the performance sheet by its HEADER, not its name. The vendor ships the same 33-column
+// layout under different tab names — "PMS Performance" in one month's file, a bare "Sheet1" in
+// the next. Keying on the name silently yielded zero schemes.
+function pickSheet(wb) {
+  for (const name of wb.SheetNames) {
+    const r = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null, raw: false });
+    if (r.length && 'Scheme Name' in r[0] && 'Scheme Return 1 Year' in r[0]) {
+      if (name !== 'PMS Performance') console.log('performance sheet found as "' + name + '" (not "PMS Performance")');
+      return r;
+    }
+  }
+  console.error('*** no sheet with a "Scheme Name" + "Scheme Return 1 Year" header — layout changed, aborting');
+  process.exit(1);
+}
+const rows = pickSheet(XLSX.readFile(SRC));
 const C = { name: 'Scheme Name', aum: 'AUM', pe: 'P/E Ratio', L: 'Large Cap', M: 'Mid Cap', S: 'Small Cap', el: 'Exit Load',
   r1m: 'Scheme Return 1 Month', r3m: 'Scheme Return 3 Month', r6m: 'Scheme Return 6 Month', r1y: 'Scheme Return 1 Year',
   r2y: 'Scheme Return 2 Year', r3y: 'Scheme Return 3 Year', r5y: 'Scheme Return 5 Year', si: 'Scheme Return Since Inception',
@@ -97,6 +114,7 @@ console.log(`AUM column treated as ${inRupees ? 'rupees (all / 1e7)' : 'crore (a
 
 const pms = {};
 let empties = 0;
+const dupeNames = [];
 for (const r of rows) {
   const name = raw(r[C.name]); if (!name) continue;
   const rec = {}; const set = (k, v) => { if (v != null) rec[k] = v; };
@@ -109,7 +127,21 @@ for (const r of rows) {
   const L = pct(r[C.L]), Mi = pct(r[C.M]), S = pct(r[C.S]);
   if (L != null && Mi != null && S != null) { set('mcap_large', L); set('mcap_mid', Mi); set('mcap_small', S); set('mcap_other', +Math.max(0, 1 - (L + Mi + S)).toFixed(6)); }
   if (!Object.keys(rec).length) { empties++; continue; }
+  // A scheme can appear twice: once complete, once as a stub carrying a different AUM and no
+  // returns (Axis Pure Contra Portfolio in the 03-Sep file). Plain last-wins let the stub blank
+  // out real performance, so keep whichever row actually carries more data.
+  const prev = pms[name];
+  if (prev) {
+    const fields = o => Object.keys(o).length;
+    dupeNames.push(name + '  ' + fields(prev) + ' vs ' + fields(rec) + ' fields — kept the ' +
+      (fields(rec) > fields(prev) ? 'later' : 'earlier'));
+    if (fields(rec) <= fields(prev)) continue;
+  }
   pms[name] = rec;
+}
+if (dupeNames.length) {
+  console.log('\nduplicate scheme rows resolved by field count: ' + dupeNames.length);
+  dupeNames.forEach(d => console.log('   ' + d));
 }
 
 const cur = B.read(HTML, 'window.PMS_PERFORMANCE = ').value;
