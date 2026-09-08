@@ -1803,6 +1803,24 @@ window.linkIdcwToGrowth();
 
   // Cash / repo / TREPS patterns to exclude from stock lists
   const _CASH_RE = /^(treps|tri.party.repo|cblo|clearing.corp|ccil|cash|net.receivable|repo|reverse.repo|liquid.bees|overnight)/i;
+  // The other non-equity rows the analytics workbooks carry inside a fund's stock
+  // list: the net-current-asset balancing line, "Other Assets", dated treasury
+  // bills and GOI gilts. _CASH_RE matches none of them, so two funds parking cash
+  // in the same 91-day bill scored it as holdings overlap. Anchored at the start,
+  // because listed companies carry these words mid-name and must survive: Central
+  // Depository Services, National Securities Depository, Radiant Cash Management,
+  // Quadrant Future Tek.
+  const _NONSTOCK_RE = /^(net\s*(current\s*)?assets?\b|other\s*(current\s*)?assets?\b|\d+\s*days?\s*treasury\s*bill|treasury\s*bill|t[-\s]?bills?\b|\d[\d.]*\s*%?\s*goi\b|goi\b|g[-\s]?sec\b|state\s*development\s*loan|corporate\s*debt\s*repo)/i;
+  // Index exposure and derivatives. An option is not a stock holding: a fund
+  // carrying "Swiggy Ltd. - Put" is hedged rather than long Swiggy, and two funds
+  // holding Nifty futures overlap in exposure but not in stocks. Options match at
+  // the END of the name (dash, optional strike, Call/Put) precisely so company
+  // names survive — a looser rule swallows "BSE Ltd." (298 funds), "Crowdstrike
+  // Holdings Inc" and "Quadrant Future Tek Ltd.". Index-tracking ETFs and index
+  // funds are real holdings and are kept: only a bare index name is dropped, so
+  // "Nifty 50" goes and "Tata Nifty India Digital ETF" stays. "Call Money" is
+  // overnight interbank cash, not an option.
+  const _DERIV_RE = /^(nifty|midcpnifty|sensex|bank\s*nifty)\b|^call\s*money\b|[-–]\s*\d*\s*(calls?|puts?|fut(ures?)?)\s*$/i;
 
   function eligibleOverlapFunds(selected) {
     const COMMODITY_RE = /\bgold\b|\bsilver\b/i;
@@ -1820,27 +1838,48 @@ window.linkIdcwToGrowth();
   }
 
   function computeOverlap(fundA, fundB) {
-    // Fetch raw stock lists and strip cash/repo/TREPS entries
+    // Canonical argument order: floating-point addition is not associative, so
+    // summing the same terms in a different sequence can differ in the last bits.
+    // Ordering the pair by name makes computeOverlap(A,B) and computeOverlap(B,A)
+    // run the identical loop, so the matrix is exactly symmetric, not nearly so.
+    if (String(fundB.name) < String(fundA.name)) { const t = fundA; fundA = fundB; fundB = t; }
+    // Fetch raw stock lists and strip every non-equity row (cash, repo, TREPS,
+    // net current assets, treasury bills, gilts)
     function getStocks(fund) {
       const raw = window.EQUITY_ANALYTICS[fund.name]?.stocks
         || (window.HYBRID_ANALYTICS[fund.name]?.eq_stocks || []);
-      return raw.filter(x => !_CASH_RE.test(x.name));
+      return raw.filter(x => !_CASH_RE.test(x.name) && !_NONSTOCK_RE.test(x.name)
+        && !_DERIV_RE.test(x.name));
     }
-    const stocksA = getStocks(fundA);
-    const stocksB = getStocks(fundB);
-    // Build normCo-keyed map for B; sum weights for same normalised name (rare)
-    const mapB = {};
-    for (const x of stocksB) {
-      const k = normCo(x.name);
-      mapB[k] = (mapB[k] || 0) + x.pct;
+    // Collapse each fund's rows onto normCo keys: sum same-name duplicates, drop
+    // non-positive weights. BOTH funds must go through this or the matrix is not
+    // symmetric — the old code walked A's raw rows against an aggregated B, so a
+    // negative row A holds and B does not (e.g. "Net Current Asset" at -0.46%)
+    // added min(-0.46, 0) = -0.46 to the total. Only the row-side fund's negatives
+    // were subtracted, so A-vs-B and B-vs-A disagreed (11.94% vs 12.40%).
+    function weightMap(stocks) {
+      const m = Object.create(null);
+      for (const x of stocks) {
+        const k = normCo(x.name);
+        if (!k) continue;
+        const w = +x.pct || 0;
+        if (w <= 0) continue;
+        m[k] = (m[k] || 0) + w;
+      }
+      return m;
     }
+    const mapA = weightMap(getStocks(fundA));
+    const mapB = weightMap(getStocks(fundB));
     // Overlap = Σ min(wA, wB) over common normCo keys. No re-normalisation.
     let overlap = 0;
-    for (const x of stocksA) {
-      const k = normCo(x.name);
-      overlap += Math.min(x.pct, mapB[k] || 0);
+    for (const k in mapA) {
+      if (mapB[k]) overlap += Math.min(mapA[k], mapB[k]);
     }
-    return overlap;
+    // A handful of index funds report gross stock weights summing past 100 (a
+    // negative "Net Current Asset" line balances them back), which would print
+    // e.g. 107.59% for an ETF against its own index fund. Overlap is a share of
+    // a portfolio, so it cannot exceed 100.
+    return overlap > 100 ? 100 : overlap;
   }
 
   function overlapClass(v) {
