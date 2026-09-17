@@ -23,7 +23,10 @@ const P = {
   eq:   path.join(DIR, 'Analytics', fs.readdirSync(path.join(DIR, 'Analytics')).find(f => /^Equity Analytics_/i.test(f)) || ''),
   hy:   path.join(DIR, 'Analytics', fs.readdirSync(path.join(DIR, 'Analytics')).find(f => /^Hybrid Analytics_/i.test(f)) || ''),
   db:   path.join(DIR, 'Analytics', fs.readdirSync(path.join(DIR, 'Analytics')).find(f => /^Debt Analytics_/i.test(f)) || ''),
-  reg:  path.join(DIR, fs.readdirSync(DIR).find(f => /^Daily MF ?monitor_\d/i.test(f)) || ''),
+  // Regular monitor = anything but the Direct one. The file name drifts month to month
+  // ("Daily MF monitor_30th June 2026", "Daily MF Monitor as on 31st August 2026"), so match
+  // the stem and exclude "_Direct" rather than pinning a separator.
+  reg:  path.join(DIR, fs.readdirSync(DIR).find(f => /^Daily MF ?monitor\b/i.test(f) && !/_Direct/i.test(f)) || ''),
   dir:  path.join(DIR, fs.readdirSync(DIR).find(f => /^Daily MF Monitor_Direct/i.test(f)) || ''),
 };
 for (const [k, v] of Object.entries(P)) {

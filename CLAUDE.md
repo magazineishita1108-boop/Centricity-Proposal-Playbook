@@ -8,7 +8,8 @@ entire fund universe embedded in `<script>` tags.
 operating manual; the PRD has the full feature history and rationale. Where they disagree, the
 live code wins — see *Verifying* below.
 
-Owner/admin: Rahul Yadav (rahul.yadav@centricity.co.in). Verified against the live files 31-Jul-2026.
+Owner/admin: Rahul Yadav (rahul.yadav@centricity.co.in). Verified against the live files
+17-Sep-2026 (Aug-2026 data refresh).
 
 ---
 
@@ -61,6 +62,10 @@ Do not re-add a script tag for it without first checking the inline block would 
 | `merge_pms_performance.js` + `pin_pms_alias.js` | LIVE — the PMS performance refresh |
 | `merge_reckoner.js` + `reck_parse.js` + `reck_narrative.js` + `pptx.js` | LIVE — the Centricity Select refresh |
 | `add_reckoner_funds.js` | LIVE — adds instruments the deck recommends but MASTER lacks (a **universe** change) |
+| `rename_schemes.js` | LIVE — **run FIRST every month.** Folds SEBI scheme renames onto the existing records instead of letting the bake duplicate them |
+| `fold_duplicate_names.js` | LIVE — one-off/idempotent: folds a same-fund-two-spellings pair that `rename_schemes.js` cannot reach. The Monitor picks the survivor |
+| `merge_sif_monitor.js` | LIVE — bakes the SIF Monitor into the SIF sibling via its own `parseSif` |
+| `merge_fund_managers.js` | LIVE — `MASTER.fund_mgr` from the full manager roster |
 | `merge_analytics.js` | LIVE — re-bakes ONE analytics class; `bake_month.js` does all three plus the monitor |
 | `rekey_sif_analytics.js` | LIVE — **required after every analytics bake**; see *SIF analytics are keyed differently* |
 | `merge_pms_aif_analytics.js` | LIVE — PMS/AIF equity look-through; **writes the sibling too** |
@@ -108,16 +113,20 @@ Line numbers below are as of 28-Jul-2026 and **drift with every edit** — re-de
 `window.MASTER` is also assigned at L2629, L2829, L2949, L7593–94, L7629–30 — those are **runtime
 uploader / add-fund handlers**, not data blocks. Only L1031 is the baseline.
 
-### Effective in-browser universe (after all five siblings run): **7,608**
+### Effective in-browser universe (after all five siblings run): **7,652** (Aug-2026 refresh)
 
-Direct Equity 5,353 · Bonds 50 (Invictus 36 · OneDigital 14) · MLD 1 · Equity SIF 15 · Hybrid SIF 13 · Mutual Fund 1,744
-(522 of them Index Fund, folded in 21-Aug-2026) · ETF 252 · the rest as before.
+Direct Equity 5,370 · Bonds 50 (Invictus 36 · OneDigital 14) · MLD 1 · Equity SIF 15 · Hybrid SIF 14 ·
+Mutual Fund 1,755 (536 of them Index Fund, folded in 21-Aug-2026) · ETF 255 · Mutual Funds 67 ·
+GIFT City 54 · Offshore Funds 4 · AIF 28 · PMS 27 · Fixed Deposit 6 · Unlisted Equity 5 · REIT/InvIT 1.
 
-`EQUITY_ANALYTICS` 1,155 · `HYBRID_ANALYTICS` 246 · `DEBT_ANALYTICS` 495 · `DIRECT_PERF` 1,676 ·
-`MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
+Baseline `MASTER` block 7,643. `EQUITY_ANALYTICS` 1,192 · `HYBRID_ANALYTICS` 254 ·
+`DEBT_ANALYTICS` 508 · `DIRECT_PERF` 1,680 · `MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
 
-Effective `DATA_DATES`: performance / analytics / pms = `31st July 2026`,
-`riskMatrix` = `30 Jun 2026`, **`sif` = `—` (still unset)**.
+Effective `DATA_DATES`: performance / analytics / **sif** = `31st August 2026`,
+pms = `31st July 2026`, `riskMatrix` = `30 Jun 2026`.
+
+222 MF records carry a `prev_name` — 217 from the Aug-2026 SEBI rename, 5 from the duplicate
+fold of 17-Sep-2026 (see *Two spellings of one fund* under Traps).
 
 **`Centricity_June_Refresh.js` used to stamp `DATA_DATES.analytics = "30th June 2026"` on every
 page load**, silently reverting any later analytics bake. Removed 13-Aug-2026. If an as-on date
@@ -233,6 +242,26 @@ portfolio and the distribution totals 43%. Concentrated funds are complete; the 
 holdings sum is 100%. Fixing it means either normalising the buckets to the covered portion or
 carrying more holdings per fund at bake time — a decision that changes a client-facing number.
 
+**Holdings overlap is symmetric — compute it from two weight maps, never rows-vs-map**
+(08-Sep-2026). `computeOverlap` walked fund A's raw holding rows against an aggregated map of B,
+so a negative row A held and B did not (the "Net Current Asset" balancing line at `-0.46%`)
+contributed `min(-0.46, 0) = -0.46` to the total. Only the *row-side* fund's negatives were
+subtracted, so A-vs-B and B-vs-A disagreed — 11.94% one way, 12.40% the other. **342 of 1,398
+funds carry negative rows**, some as large as `-98%`.
+
+Both funds now go through one `weightMap` (`normCo` keys, duplicates summed, non-positive weights
+dropped) and overlap is the sum of `min` over shared keys. Canonical argument order keeps the two
+directions bitwise identical rather than merely close. **The result is capped at 100** — dropping
+the negatives alone pushed 26 ETF/index-fund twins past it, DSP Nifty IT ETF against its own index
+fund reading 107.59%.
+
+Rows that are not stocks are stripped, or they score as holdings overlap: the net-current-asset
+line (present in 1,088 funds), "Other Assets", dated treasury bills, GOI gilts, bare index exposure
+and single-stock options. **Every pattern is anchored so listed companies survive** — BSE Ltd. (298
+funds) must not be eaten by a "BSE"/index rule, nor Crowdstrike Holdings by "Holdings", nor Quadrant
+Future Tek by a T-Bill rule, and index-tracking ETFs are kept as funds. Verify across all pairs
+(124,750 of them): 0 asymmetric, none outside [0,100], and no fund left without usable stock rows.
+
 **An MLD is its own holding, like a bond.** `H.isSelfDescribingDebt` (Bonds + MLD) is what both
 the debt scope gate and the debt aggregator test, so the chip list can never disagree with what is
 aggregated. The look-through reads `bond_issuer` / `bond_rating` straight off the record — Neo is
@@ -268,6 +297,51 @@ records are named "…ETF" but were filed as index funds upstream — that pre-d
 feeder funds, listed separately in `PC_ORDER` (L1082) and explicitly filtered out of the main product
 list at L4509. Singular `"Mutual Fund"` (1,200) is the domestic MF bucket. Merging them breaks the
 Global Funds tab.
+
+**Two spellings of one fund — `rename_schemes.js` structurally cannot catch this** (17-Sep-2026).
+Five funds sat in `MASTER` twice under two spellings, each copy carrying *different* returns, so a
+proposal picked up whichever row the user clicked. The rename tool pairs a MASTER name against a
+monitor name the monitor **still carries**; here *both* spellings were already in MASTER, so every
+name-keyed gate saw two distinct funds and passed — including the 0-duplicates gate, which tests
+for an identical string. They pre-dated the Aug-2026 SEBI rename (all ten names are in
+`index.html.bak_aug_20260917`).
+
+**The Monitor decides which row wins — it is not a judgement call.** Whatever the monitor quotes
+is what next month's bake keeps re-creating, so the other spelling can only ever be an orphan
+freezing last month's returns. In all five cases the monitor carried the post-SEBI spelling, and
+the survivor's stored inception matched the monitor's to the day while the orphan sat one day
+later — that one-day offset is the same artefact seen elsewhere, and it is why the inception-keyed
+tie-breaks never paired them either.
+
+```bash
+node fold_duplicate_names.js --monitor "<Daily MF Monitor ....xlsx>" --apply
+```
+
+| dropped (orphan) | kept (survivor, = the Monitor's spelling) |
+|---|---|
+| `ITI Multi-Cap Fund-Reg(G)` | `ITI Multi Cap Fund-Reg(G)` |
+| `Quantum Nifty 50 ETF FoF-Reg(G)` | `Quantum Nifty 50 ETF FOF-Reg(G)` |
+| `ITI Ultra Short Duration Fund-Reg(G)` | `ITI Ultra Short Term Fund-Reg(G)` |
+| `ITI Dynamic Bond Fund-Reg(G)` | `ITI Dynamic Term Fund-Reg(G)` |
+| `Quantum Dynamic Bond Fund-Reg(G)` | `Quantum Dynamic Term Fund-Reg(G)` |
+
+`FOF` all-caps and `Multi Cap` unhyphenated read worse than the spellings they replaced. Leave
+them: re-prettifying a name the monitor does not use re-creates the orphan on the next bake.
+
+The orphan is folded, not just deleted, and only **house/static** fields move across — never a
+return, AUM, TER, YTM, duration, or the m-cap split (atomic, and the survivor's is current), nor
+`inception` (the survivor's is the monitor's, which is what `rename_schemes.js` matches on).
+
+- **All five Expected-IRR bands lived in `Centricity_IRR_Offshore.js` under the ORPHAN name**, and
+  that sibling re-applies `IRR[f.name] → irr_low/irr_high` on every page load. Un-rekeyed, the
+  five survivors would have shown no IRR band and so no FV projection — none of them carried one
+  of their own. The tool re-keys the sibling and gates that it agrees with MASTER afterwards.
+- **`Quantum Nifty 50 ETF FoF-Reg(G)` held the only `DIRECT_PERF` overlay** and the survivor had
+  none, so the Direct toggle silently fell back to Regular on the row users actually pick. Moved.
+- Where *both* names held a store entry (two `DEBT_ANALYTICS` records) the survivor's is this
+  month's bake and the orphan's is last month's under a name the source dropped — stale one goes.
+- `prev_name` on the survivor records the dropped spelling, so an allocation sheet or proposal
+  saved against the old name still resolves through `H.buildFundIndex`'s second pass.
 
 **OneDrive / bash-mount staleness.** The Linux sandbox's view of large files here lags edits made
 through the Edit tool, in both directions. Never trust a bash-side `node --check` or `grep` on
@@ -327,8 +401,8 @@ node .claude/serve.js
 
 Serves the project folder on http://localhost:8080 (also wired as the `playbook` preview config in
 `.claude/launch.json`). Use http, not `file://` — the siblings load fine either way but the export
-paths and uploaders don't. Confirm on load: universe reads **7460 instruments** and the console is
-clean. Needs internet for the five CDN libraries.
+paths and uploaders don't. Confirm on load: the header reads **Universe — 7652 instruments** and
+the console is clean. Needs internet for the five CDN libraries.
 
 ---
 
@@ -405,7 +479,10 @@ node update_market_slides.js --slides "<dir of slide1..5.jpg>" --apply
 - Verify by decoding all 9 images in the browser (`new Image()` per data URI), not by file size.
 
 The source deck was renamed from `Monthly Outlook Pagers- <Month Year>.pptx` to
-`Market Update Slide_<Month Year>.pptx` with the August 2026 edition.
+`Market Update Slide_<Month Year>.pptx` with the August 2026 edition — **and back again for
+September 2026**. Take whichever 5-slide market deck is in the month folder; don't match the name.
+
+September 2026 export: 1,768 KB raw → 1,308 KB at quality 82, 5 slides, all 2001×1125.
 
 ---
 
@@ -417,18 +494,25 @@ Rahul drops these each cycle. June 2026 set lives at:
 
 | File | Feeds |
 |---|---|
-| `Daily MF Monitor_<date>.xlsx` | `MASTER` performance |
+| `Daily MF Monitor as on <date>.xlsx` | `MASTER` performance — **and the rename map**, `rename_schemes.js` |
 | `Daily MF Monitor_Direct_<date>.xlsx` | `DIRECT_PERF` overlay |
 | `Analytics\Equity Analytics_<Month>.xlsx` | `EQUITY_ANALYTICS` |
 | `Analytics\Hybrid Analytics_<Month>.xlsx` | `HYBRID_ANALYTICS` |
 | `Analytics\Debt Analytics_<Month>.xlsx` | `DEBT_ANALYTICS` |
 | `Analytics\Listed Direct Equity_<Month>.xlsx` | Direct Equity sector / mcap / ISIN (**join `sebi_mcap` by name**) |
-| `Listed Direct equity_<date>.xlsx` *(Desktop root)* | Direct Equity **returns** → `merge_direct_equity_returns.js` |
+| `Listed Direct Equity_<date>.xlsx` | Direct Equity **returns** → `merge_direct_equity_returns.js` |
 | `NAV Data as on <date>.xlsx` | `RISK_MATRIX` via `build_risk_matrix.py` |
 | `3Y Rolling + Risk Ratios - MF (as on <date>).xlsx` | spot-check reference for the above |
-| `SIF Master List_<Month Year>.xlsx` | `Centricity_SIF_Refresh.js` |
-| `Exit Load_MF_<Month>.xlsx` | exit-load text (2-col Name→Remark since Jul-2026) |
+| `SIF Master List_<Month Year>.xlsx` | SIF **universe** → `Centricity_SIF_Refresh.js` |
+| `SIF Monitor_<date>.xlsx` | SIF **performance** → `merge_sif_monitor.js` (Aug-2026 on) |
+| `Fund Manager Data_<date>.xlsx` | `MASTER.fund_mgr` → `merge_fund_managers.js` (Aug-2026 on) |
+| `Expense Ratio_<Month>.xlsx` + `Exit Load_<Month>.xlsx` | `expense` / `exit_load` → `merge_expense_exitload.js` |
 | `Market Update Slide_<Month Year>.pptx` | `EXTRA_SLIDES.market` → `update_market_slides.js` |
+
+**The file names drift.** Aug-2026 alone moved the monitor to `Daily MF Monitor as on <date>`, put
+the Direct Equity returns file *inside* the month folder rather than at the Desktop root, dropped
+the `_MF` from `Exit Load`, and reverted the market deck to `Monthly Outlook Pagers- <Month>`.
+Match on the stem, not the separator, and check the folder listing before assuming a path.
 
 **Two files share the "Listed Direct Equity" name and are not interchangeable.** The one in
 `Analytics\` carries sector / industry / market cap / ISIN (~5,300 rows). The one at the Desktop
@@ -446,9 +530,23 @@ the embedded value). The **Regular row also carries `Direct Plan Ratio`**, so on
 plans — `MASTER.expense` and `DIRECT_PERF[].expense`. Sanity bound is 8%, not the usual 2.25% MF
 cap: SIF / long-short schemes in this universe genuinely run 4–6%+.
 
-**Not wired to anything yet** — no field exists in `MASTER`: `AMFI CODE.xlsx`,
-`Fund Manager_MF_<Month>.xlsx` ("Fund Manager" appears only as free text inside
-`CENTRICITY_SELECT` Reckoner rationales). Adding them is a feature, not a refresh.
+**Fund managers ARE wired** (Aug-2026). The Monitor's `[Fund Manager 1]` column only ever gave one
+name; `Fund Manager Data_<date>.xlsx` is one row per manager per stint and names the whole team:
+
+```bash
+node merge_fund_managers.js "<Fund Manager Data_<date>.xlsx>" --apply
+```
+
+"Current" is decided **per scheme**, not against one global date — AMCs report to different
+month-ends in the same file (Aug-2026 had 1,123 rows at 30-Aug and 3,317 at 30-Jul). A manager is
+current when their `To Date` is the latest that scheme has, provided that date is within 90 days of
+the file's own latest; a roster that stopped updating keeps whatever the Monitor gave it. Aug-2026:
+2,009 schemes matched, 1,451 rewritten, 1,438 of them simply gaining the rest of the team.
+`fund_mgr` is internal — the Master Editor column and the Section 3 search box, never client-facing
+— so a multi-name string is safe there.
+
+**Not wired to anything yet** — no field exists in `MASTER`: `AMFI CODE.xlsx`. Adding it is a
+feature, not a refresh.
 
 ### Changes shipped 31-Jul-2026
 
@@ -532,13 +630,65 @@ not loaded by anything, and it's the `.bak_regen` copy rather than the current 1
 the month's workbooks inside a Node `vm` sandbox, then writes the resulting globals back into the
 embedded blocks — so a bake produces exactly what the Section 7 uploader would.
 
+The full monthly order, as run for Aug-2026. **`rename_schemes.js` comes first** — see the next
+section for why. Every step is dry-run by default; read the gates before adding `--apply`.
+
 ```bash
-node bake_month.js --dir "<Month folder>" --as-on "31st July 2026"          # dry run
-node bake_month.js --dir "<Month folder>" --as-on "31st July 2026" --apply
+npm install xlsx@0.18.5              # not vendored; the folder ships with no node_modules
+node rename_schemes.js --monitor "<Month folder>/Daily MF Monitor ....xlsx" --apply
+node bake_month.js --dir "<Month folder>" --as-on "31st August 2026" --apply
+node fill_variant_analytics.js --dir "<Month folder>" --apply
+node rekey_sif_analytics.js --apply
 node merge_de_universe.js "<Analytics/Listed Direct Equity_<Month>.xlsx>" --apply
-node merge_direct_equity_returns.js "<Listed Direct Equity Returns_<date>.xlsx>" --apply
-node merge_expense_exitload.js --expense "<...>" --exitload "<...>" --apply
+node merge_direct_equity_returns.js "<Listed Direct Equity_<date>.xlsx>" --apply
+node merge_expense_exitload.js --expense "<Expense Ratio_<Month>.xlsx>" --exitload "<Exit Load_<Month>.xlsx>" --apply
+node merge_sif_monitor.js "<SIF Monitor_<date>.xlsx>" --apply
+node merge_fund_managers.js "<Fund Manager Data_<date>.xlsx>" --apply
+node verify_page.js .
 ```
+
+### Scheme names are not stable — rename BEFORE you bake
+
+**Aug-2026: SEBI's scheme-name standardisation renamed 217 live schemes at once.** The monitor's
+file name also drifted (`Daily MF monitor_<date>` → `Daily MF Monitor as on <date>`; `bake_month.js`
+now matches the stem and excludes `_Direct`).
+
+Every parser here matches by name, so a renamed scheme reads as a *new* fund: the bake appends a
+second record under the new name and leaves the old one carrying last month's returns. Baking
+Aug-2026 without renaming first put MASTER at 7,847 instead of 7,633 — ~215 duplicate funds in a
+client-facing pick list, half of them stale — and dropped 218 Direct overlays instead of 15.
+
+`rename_schemes.js` identifies a scheme by **inception date + AMC, never by name**, in three tiers:
+
+| Tier | How | Aug-2026 |
+|---|---|---|
+| name | identical once plan suffixes, `&` and "and" are normalised away | 35 |
+| inception+AMC | same AMC, same inception; ties broken by the monitor sheet's own taxonomy | 180 |
+| AMC+category 1-to-1 | exactly one unmatched scheme on each side of an (AMC, category) cell | 2 |
+
+Anything still ambiguous is **reported, never guessed**. It renames every store keyed by fund name
+— MASTER, EQUITY/HYBRID/DEBT_ANALYTICS, DIRECT_PERF, RISK_MATRIX, CENTRICITY_SELECT — plus
+`Centricity_IRR_Offshore.js`'s `IRR` map, which is keyed by exact MASTER name and would otherwise
+silently stop matching, costing 215 funds their Expected-IRR band and so their FV projection.
+
+It stamps the old name on the record as **`prev_name`**, which `H.buildFundIndex` indexes in a
+second pass (behind the live name, so a current name always wins). An allocation sheet or proposal
+saved before the rename therefore still resolves — `"HDFC Low Duration Fund(G)"` lands on
+`HDFC Ultra Short to Short Term Fund(G)`. Re-running is a no-op and it reads `prev_name` back, so
+a second run still reaches a sibling the first one missed.
+
+The Aug-2026 mapping, for recognising the next one: `Low Duration → Ultra Short to Short Term`,
+`Short Duration → Short Term`, `Ultra Short Duration → Ultra Short Term`, `Medium/Long Duration →
+Medium/Long Term`, `Dynamic Bond → Dynamic Term`, `Floater / Floating Rate → Floating Interest
+Rates`, `Banking & PSU → Banking and PSU Debt`, `Flexicap/Midcap/Multicap/Smallcap → Flexi Cap/Mid
+Cap/…`, `Equity & Debt / Equity Hybrid → Aggressive Hybrid`, `Savings/Money Manager → Money Market`,
+`ELSS Tax Saver → ELSS-Tax Saver`. Index names are NOT categories — "Nifty Midcap 150 Index Fund"
+must never be rewritten.
+
+**JioBlackRock renamed and moved from direct-only to a Regular plan in the same month**, so its
+monitor "Inception Date" is the *Regular plan's* launch (2026-08-16 for nearly every scheme), not
+the fund's. That is what tier 3 exists for. Do not trust that column as an identity for an AMC
+that has just opened a Regular plan.
 
 **It deliberately does not execute the five siblings.** They mutate `MASTER` on every page load, so
 the baseline block must stay pre-sibling — otherwise their edits get baked in *and* re-applied.
@@ -614,6 +764,43 @@ have no MASTER instrument and are reported, not invented. Effective PMS/AIF with
 **`blocklib.writeBlocks` derives its `</html>` guard from the input**, so it keeps the guarantee
 for `index.html` and still works on the `.js` siblings. It refused rather than corrupting the
 sibling when the guard was unconditional — do not weaken it to a caller-supplied flag.
+
+### SIF performance is baked in — `merge_sif_monitor.js`
+
+Until Aug-2026 the 28 SIF rows shipped with every return `null` and `DATA_DATES.sif` reading `—`;
+the numbers only appeared if someone remembered to upload a sheet. The SIF Monitor is now baked
+into `Centricity_SIF_Refresh.js`'s `var SIF` block the same way the MF Monitor is baked into
+`MASTER`:
+
+```bash
+node merge_sif_monitor.js "<SIF Monitor_<date>.xlsx>" --apply
+```
+
+It runs **the sibling's own `REFRESH.parseSif`** in a `vm` sandbox — the same parser the Section 7
+card calls — so a bake and an upload of one file produce byte-identical data. There is no second
+parser to drift. Verified: re-uploading the baked file changes 0 values and appends 0 rows.
+
+The tool also rewrites the sibling's `DATA_DATES.sif` line. That line is assigned
+**unconditionally**, not behind a `!DATA_DATES.sif` guard: index.html's embedded placeholder is
+the truthy string `"—"`, which would otherwise win. This is safe — the sibling *is* the source of
+the SIF data, so it owns the date, and an upload still wins because `parseSif` runs later.
+
+`parseSif` mirrors `parseMfMonitor` on purpose, so the two cards behave alike:
+
+- **As-on precedence: picker → file name → the workbook's own "As on" banner.** Leaving the picker
+  blank is the normal case; `SIF Monitor_31st August 2026.xlsx` dates itself.
+- A scheme in the monitor but not in MASTER is **appended**, filed from the workbook's own
+  `Asset Type` column as `Equity SIF` / `Hybrid SIF`. Nothing is invented: no AMC prefix and no IRR
+  band, since the workbook carries neither.
+- It reads `Inception Date` and `Remark` (exit load) as well as the returns. Those go through
+  `metaKind()`, kept separate from `colKind()` — a date column reaching `si` through `/incept/`
+  would store an epoch as a percentage.
+- Accord's disclaimer paragraph sits in the name column below the data; rows over 120 characters
+  are skipped as prose.
+
+**Aug-2026 left one scheme without an AMC prefix.** `Prism Hybrid Long-Short Fund` is new and the
+monitor gives no house name, so it reads without one while every sibling reads `<AMC> <Scheme>`.
+Pin it by hand in the `var SIF` block when the desk confirms the AMC.
 
 ### SIF analytics are keyed by the scheme name, not the fund name
 
@@ -695,19 +882,22 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 
 | Domain | Source file | Cadence | As-on now |
 |---|---|---|---|
-| MASTER performance | `Daily MF monitor_<date>.xlsx` (48 sheets) | ~15 days | 30 Jun 2026 |
-| Direct-plan overlay | `Daily MF Monitor_Direct_<date>.xlsx` | with above | 30 Jun 2026 |
-| Equity/Hybrid/Debt Analytics | `<Class> Analytics_<Month>.xlsx` | monthly | 30 Jun 2026 |
+| MASTER performance | `Daily MF Monitor as on <date>.xlsx` (48 sheets) | ~15 days | 31 Aug 2026 |
+| Direct-plan overlay | `Daily MF Monitor_Direct_<date>.xlsx` | with above | 31 Aug 2026 |
+| Equity/Hybrid/Debt Analytics | `<Class> Analytics_<Month>.xlsx` | monthly | 31 Aug 2026 |
 | PMS/AIF look-through | `PMS & AIF Analytics <Month Year>.xlsx` (Desktop root) | monthly | 31 Jul 2026 |
 | PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` | monthly | 31 Jul 2026 |
 | AIF performance + benchmarks | the Reckoner deck itself → `merge_aif_performance.js` | monthly | 31 Jul 2026 |
-| Direct Equity | `Listed Direct Equity_<Month>.xlsx` | monthly | 28 Jul 2026 |
+| Direct Equity | `Listed Direct Equity_<Month>.xlsx` (universe + returns) | monthly | 31 Aug 2026 |
 | Bonds | `Bond List_<date>.xlsx` → `merge_bond_list.js` | periodic | Invictus 6 Aug 2026; OneDigital older |
 | GIFT City / Offshore | `Gift City Master List.xlsx` | periodic | Jun 2026 (sibling) |
-| SIF universe + perf | `SIF Master List_<Month Year>.xlsx` | monthly | universe Jul 2026; **perf unset** |
+| SIF universe | `SIF Master List_<Month Year>.xlsx` | monthly | Jul 2026 (29 schemes incl. Prism, added Aug) |
+| SIF performance | `SIF Monitor_<date>.xlsx` -> `merge_sif_monitor.js` | monthly | 31 Aug 2026 |
+| Fund managers | `Fund Manager Data_<date>.xlsx` -> `merge_fund_managers.js` | monthly | 31 Aug 2026 |
+| Expense / exit load | `Expense Ratio_<Month>.xlsx` + `Exit Load_<Month>.xlsx` | monthly | Aug 2026 |
 | Expected IRR | Exit Load & Expected IRR file (**format changed** — verify columns each run) | monthly | — |
 | Portfolio Matrix | `NAV Data as on <date>.xlsx` | monthly | 30 Jun 2026 (1,088 funds) |
-| Market Update slides | `Market Update Slide_<Month Year>.pptx` | monthly | August 2026 (5 slides) |
+| Market Update slides | `Monthly Outlook Pagers- <Month Year>.pptx` *(renamed back)* | monthly | September 2026 (5 slides) |
 | Centricity Select | `Monthly Investment Reckoner - <Month Year>.pptx` | monthly | Aug 2026 |
 
 **Procedure for any refresh:**
@@ -838,13 +1028,19 @@ the page's scripts in document order in a Node `vm` sandbox with a `window`/`doc
 reproduces the true browser state including all five sibling mutations. Expected results:
 
 ```
-MASTER baseline 7599  →  effective 7607
-EQUITY_ANALYTICS 1110 →  effective 1138      RISK_MATRIX 1088
-CENTRICITY_SELECT 178     PMS_AIF_TERMS 73    EXTRA_SLIDES 10 images (3 dividers + 5 market + disclaimer + thankyou)
+MASTER baseline 7643  →  effective 7652
+EQUITY_ANALYTICS 1190 →  effective 1192      RISK_MATRIX 1088
+CENTRICITY_SELECT 178 (all 178 still present in MASTER)   PMS_AIF_TERMS 73
+EXTRA_SLIDES 6 keys / 10 images (3 dividers + 5 market + disclaimer + thankyou)
 PMS_PERFORMANCE.pms 692   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
-HYBRID_ANALYTICS 246 (July workbook covers 241)   DEBT_ANALYTICS 495
+HYBRID_ANALYTICS 254      DEBT_ANALYTICS 508
+DATA_DATES sif = "31st August 2026"   (NOT "—" — if it reads "—" the SIF sibling did not load)
 0 duplicate names         file ends </body></html>
 ```
+
+**`CENTRICITY_SELECT` keys present in MASTER is the rename canary.** It was 178 of 178 before and
+after the Aug-2026 rename. A drop there means a rename moved a fund the Reckoner recommends and
+the Select block did not follow — re-run `rename_schemes.js`, which re-keys it.
 
 Skip the `React is not defined` errors from the UI blocks — expected without a DOM.
 
@@ -858,7 +1054,16 @@ Skip the `React is not defined` errors from the UI blocks — expected without a
 4. Archive `*.bak_*` older than ~60 days out of OneDrive.
 5. ~~Re-establish a recurring AIF performance + benchmarks source.~~ Done 20-Aug-2026 — the
    Reckoner deck carries it; see *AIF performance*.
-6. Set the SIF performance as-on date (`DATA_DATES.sif` is `—`).
+6. ~~Set the SIF performance as-on date (`DATA_DATES.sif` is `—`).~~ Done 17-Sep-2026 — the SIF
+   Monitor is baked in; see *SIF performance is baked in*.
+8. ~~**Pre-existing duplicate pairs in the base data** — five funds are in `MASTER` twice under
+   two spellings, each pair carrying *different* returns.~~ Done 17-Sep-2026 — folded by
+   `fold_duplicate_names.js`; see *Two spellings of one fund* under Traps. No desk decision was
+   needed in the end: the Aug-2026 Monitor quotes exactly one spelling of each pair, and that
+   settles which row is the live instrument.
+9. `Prism Hybrid Long-Short Fund` (new SIF, Aug-2026) has no AMC prefix — the monitor gives none.
+10. `360 ONE Balanced Hybrid Fund-Reg(G)` is in the analytics and fund-manager workbooks but in no
+    Monitor, so it is not in `MASTER` at all. Upstream gap, pre-dates this cycle.
 7. `Risk_Matrix_Update_Prompt.md` flags: re-confirm Rf = 4.5% is still the desk convention
    (91-day T-Bill is ~5.26%).
 
