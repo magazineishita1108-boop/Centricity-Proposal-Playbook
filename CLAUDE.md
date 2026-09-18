@@ -68,6 +68,7 @@ Do not re-add a script tag for it without first checking the inline block would 
 | `merge_fund_managers.js` | LIVE — `MASTER.fund_mgr` from the full manager roster |
 | `merge_analytics.js` | LIVE — re-bakes ONE analytics class; `bake_month.js` does all three plus the monitor |
 | `rekey_sif_analytics.js` | LIVE — **required after every analytics bake**; see *SIF analytics are keyed differently* |
+| `merge_risk_matrix.js` | LIVE — the **no-Python** route into `RISK_MATRIX`, from the pre-computed risk-ratios workbook. See *Two routes into RISK_MATRIX* |
 | `merge_pms_aif_analytics.js` | LIVE — PMS/AIF equity look-through; **writes the sibling too** |
 | `merge_aif_performance.js` | LIVE — AIF performance + benchmarks, parsed out of the Reckoner deck |
 | `fold_index_funds.js` | LIVE — one-off/idempotent: Index Fund → a sub-category of Mutual Fund |
@@ -123,7 +124,7 @@ Baseline `MASTER` block 7,643. `EQUITY_ANALYTICS` 1,192 · `HYBRID_ANALYTICS` 25
 `DEBT_ANALYTICS` 508 · `DIRECT_PERF` 1,680 · `MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
 
 Effective `DATA_DATES`: performance / analytics / **sif** = `31st August 2026`,
-pms = `31st July 2026`, `riskMatrix` = `30 Jun 2026`.
+pms = `31st July 2026`, `riskMatrix` = `31 Aug 2026`.
 
 222 MF records carry a `prev_name` — 217 from the Aug-2026 SEBI rename, 5 from the duplicate
 fold of 17-Sep-2026 (see *Two spellings of one fund* under Traps).
@@ -501,8 +502,8 @@ Rahul drops these each cycle. June 2026 set lives at:
 | `Analytics\Debt Analytics_<Month>.xlsx` | `DEBT_ANALYTICS` |
 | `Analytics\Listed Direct Equity_<Month>.xlsx` | Direct Equity sector / mcap / ISIN (**join `sebi_mcap` by name**) |
 | `Listed Direct Equity_<date>.xlsx` | Direct Equity **returns** → `merge_direct_equity_returns.js` |
-| `NAV Data as on <date>.xlsx` | `RISK_MATRIX` via `build_risk_matrix.py` |
-| `3Y Rolling + Risk Ratios - MF (as on <date>).xlsx` | spot-check reference for the above |
+| `NAV Data as on <date>.xlsx` | `RISK_MATRIX` via `build_risk_matrix.py` — **needs Python, which this machine does not have** |
+| `Fund Risk Ratios & 3Y Rolling - All Funds (as on <date>).xlsx` | `RISK_MATRIX` via `merge_risk_matrix.js` (Sep-2026 on). Was a spot-check sample under the old name `3Y Rolling + Risk Ratios - MF`; now ships the full 1,088-fund universe plus a `Data Flags` tab |
 | `SIF Master List_<Month Year>.xlsx` | SIF **universe** → `Centricity_SIF_Refresh.js` |
 | `SIF Monitor_<date>.xlsx` | SIF **performance** → `merge_sif_monitor.js` (Aug-2026 on) |
 | `Fund Manager Data_<date>.xlsx` | `MASTER.fund_mgr` → `merge_fund_managers.js` (Aug-2026 on) |
@@ -644,8 +645,48 @@ node merge_direct_equity_returns.js "<Listed Direct Equity_<date>.xlsx>" --apply
 node merge_expense_exitload.js --expense "<Expense Ratio_<Month>.xlsx>" --exitload "<Exit Load_<Month>.xlsx>" --apply
 node merge_sif_monitor.js "<SIF Monitor_<date>.xlsx>" --apply
 node merge_fund_managers.js "<Fund Manager Data_<date>.xlsx>" --apply
+node merge_risk_matrix.js "<Fund Risk Ratios & 3Y Rolling ....xlsx>" --as-on "31 Aug 2026" --apply
 node verify_page.js .
 ```
+
+### Two routes into `RISK_MATRIX` — and this machine can only take one
+
+The Portfolio Matrix tab (6.4) reads `window.RISK_MATRIX`, baked inline. There are two ways to fill it:
+
+| | |
+|---|---|
+| `build_risk_matrix.py` | **The authority.** Derives every metric from the raw `NAV Data` workbook, and is the only route that produces `c` (3Y CAGR) and `RISK_MATRIX_BENCH_SD`. Needs Python + pandas/numpy/openpyxl. |
+| `merge_risk_matrix.js` | Ingests the **pre-computed** `Fund Risk Ratios & 3Y Rolling` workbook. Sets every field the UI actually renders. Node only. |
+
+**There is no Python on this machine** — not `python`, not `python3`, not the `py` launcher, and no
+interpreter anywhere on disk (the `python` you get is the Microsoft Store alias stub). That is why
+Sep-2026 went through the Node tool. Install Python 3 + `pandas numpy openpyxl` if you want the
+canonical derivation back; the runbook in `Risk_Matrix_Update_Prompt.md` still describes it.
+
+**`c` is dropped, not carried forward.** The risk-ratios workbook has no CAGR column. `c` is read by
+*nothing*: the tab's `COLS` and the PowerPoint export's `MCOLS` are the same nine keys
+(`rr be sd al so sh co ir dc`), and `c` appears only inside the data literal itself. Carrying June's
+CAGR under an August as-on date would be stale data wearing a fresh label for no visible benefit.
+`RISK_MATRIX_BENCH_SD` is likewise unread — left in place, but it is now stale by the same argument.
+
+**The workbook is generated against PRE-rename names.** Sep-2026's file still said
+`360 ONE Flexicap Fund-Reg(G)` and `Axis ELSS Tax Saver Fund-Reg(G)`. 32 of 1,088 rows joined *only*
+through the `prev_name` stamped by `rename_schemes.js` — without that they would have silently
+dropped out of the matrix. A further 29 joined through the runbook's plan-base rule
+(`(IDCW)` / `-Direct Plan` → the unique Growth/Regular MASTER row). Join tiers are printed on every
+run; **ambiguous matches are reported, never guessed**, and the gates refuse to write on one.
+
+`DATA_DATES.riskMatrix` is **not** a key of the pretty-printed `window.DATA_DATES = {…}` object — it
+is assigned on its own line just after the matrix block. `merge_risk_matrix.js` rewrites that line
+directly rather than splicing with `blocklib`, which parses JSON and would not round-trip that
+hand-formatted object.
+
+**The `Data Flags` tab is not wired into the UI.** Of 175 flagged funds, the 130 with `<250 days in
+3Y window` correctly render `—` (they carry no metrics at all). The other **45 display numbers with
+no warning**: 29 flagged `split in NAV (3Y) — risk stats unreliable`, 5 flagged
+`low correlation to mapped benchmark (β<0.30)`, and 11 flagged for 5Y Max Drawdown only — those last
+11 are harmless, since Max Drawdown is not a displayed column. So **34 funds show risk stats the
+source itself calls unreliable.** See open item 11.
 
 ### Scheme names are not stable — rename BEFORE you bake
 
@@ -896,7 +937,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | Fund managers | `Fund Manager Data_<date>.xlsx` -> `merge_fund_managers.js` | monthly | 31 Aug 2026 |
 | Expense / exit load | `Expense Ratio_<Month>.xlsx` + `Exit Load_<Month>.xlsx` | monthly | Aug 2026 |
 | Expected IRR | Exit Load & Expected IRR file (**format changed** — verify columns each run) | monthly | — |
-| Portfolio Matrix | `NAV Data as on <date>.xlsx` | monthly | 30 Jun 2026 (1,088 funds) |
+| Portfolio Matrix | `Fund Risk Ratios & 3Y Rolling ....xlsx` -> `merge_risk_matrix.js` | monthly | 31 Aug 2026 (1,088 funds; 958 with metrics) |
 | Market Update slides | `Monthly Outlook Pagers- <Month Year>.pptx` *(renamed back)* | monthly | September 2026 (5 slides) |
 | Centricity Select | `Monthly Investment Reckoner - <Month Year>.pptx` | monthly | Aug 2026 |
 
@@ -1034,7 +1075,9 @@ CENTRICITY_SELECT 178 (all 178 still present in MASTER)   PMS_AIF_TERMS 73
 EXTRA_SLIDES 6 keys / 10 images (3 dividers + 5 market + disclaimer + thankyou)
 PMS_PERFORMANCE.pms 692   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
 HYBRID_ANALYTICS 254      DEBT_ANALYTICS 508
+RISK_MATRIX 1088 keys / 958 with metrics / 429 with rolling / 1088 with benchmark / 0 with `c`
 DATA_DATES sif = "31st August 2026"   (NOT "—" — if it reads "—" the SIF sibling did not load)
+DATA_DATES riskMatrix = "31 Aug 2026"
 0 duplicate names         file ends </body></html>
 ```
 
@@ -1064,6 +1107,14 @@ Skip the `React is not defined` errors from the UI blocks — expected without a
 9. `Prism Hybrid Long-Short Fund` (new SIF, Aug-2026) has no AMC prefix — the monitor gives none.
 10. `360 ONE Balanced Hybrid Fund-Reg(G)` is in the analytics and fund-manager workbooks but in no
     Monitor, so it is not in `MASTER` at all. Upstream gap, pre-dates this cycle.
+11. **34 funds show risk stats their own source calls unreliable** (Sep-2026). The workbook's
+    `Data Flags` tab is parsed for the benchmark name but its warnings reach no one: 29 funds
+    flagged `split in NAV (3Y) — risk stats unreliable` and 5 flagged `low correlation to
+    benchmark (β<0.30)` render ordinary-looking numbers in a client-facing tab. Needs a UI
+    marker (a flag on `RISK_MATRIX` records plus a footnote), which is a feature, not a refresh.
+12. **No Python on this machine**, so `build_risk_matrix.py` — the authoritative RISK_MATRIX
+    route — cannot run. `merge_risk_matrix.js` covers everything rendered, but installing
+    Python 3 + pandas/numpy/openpyxl would restore the canonical derivation and the `c` field.
 7. `Risk_Matrix_Update_Prompt.md` flags: re-confirm Rf = 4.5% is still the desk convention
    (91-day T-Bill is ~5.26%).
 
