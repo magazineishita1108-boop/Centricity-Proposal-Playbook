@@ -939,7 +939,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | Expected IRR | Exit Load & Expected IRR file (**format changed** — verify columns each run) | monthly | — |
 | Portfolio Matrix | `Fund Risk Ratios & 3Y Rolling ....xlsx` -> `merge_risk_matrix.js` | monthly | 31 Aug 2026 (1,088 funds; 958 with metrics) |
 | Market Update slides | `Monthly Outlook Pagers- <Month Year>.pptx` *(renamed back)* | monthly | September 2026 (5 slides) |
-| Centricity Select | `Monthly Investment Reckoner - <Month Year>.pptx` | monthly | Aug 2026 |
+| Centricity Select | `Monthly Investment Reckoner - <Month Year>.pptx` *(Desktop root)* | monthly | Sep-2026 deck = as on 31 Aug 2026 |
 
 **Procedure for any refresh:**
 1. Identify which embedded block *or* which sibling the source file drives.
@@ -1043,6 +1043,36 @@ whose first header cell reads `Scheme Name` / `Strategy` and that has ≥8 colum
 on a slide is narrative (fee ladders, "About the strategy" boxes) and must not parse as a fund;
 an earlier looser parser turned `Fixed` / `Hybrid` / `Variable` into 300 phantom funds.
 
+**The deck lags the SEBI renames — `resolve()` MUST consult `prev_name`** (Sep-2026). Run against
+the September deck without it, `CENTRICITY_SELECT` went **178 -> 160**, losing 20 funds and two
+whole categories. The giveaway: the DROPPED list and the DECK NAMES WITH NO MASTER MATCH list
+pair up one-for-one — they are the *same funds*, the deck still on `Kotak Multicap Fund-Reg(G)`,
+`ICICI Pru Banking & PSU Debt Fund(G)`, `HDFC Credit Risk Debt Fund-(G)` and so on. **If those two
+lists mirror each other, stop — it is a join failure, not an editorial change.** `resolve()` now
+tries exact name → `prev_name` → normalised name → normalised `prev_name`, a live name always
+winning, and prints every prev_name hit under *RESOLVED VIA prev_name* so the bridge is visible.
+
+**A `PIN` target can itself have been renamed.** `HDFC Multi-Asset Allocation Fund(G)` and
+`SBI Constant Maturity 10 Year Gilt Fund-Reg(G)` are now the `prev_name` of the live records, and
+the `exact.has(PIN[name])` guard silently skipped both — a stale pin fails *closed*, so it reads as
+"no MASTER record" rather than erroring. The resolver follows a renamed pin target now.
+
+**Sep-2026 renamed the scheme ON TOP of the old name** instead of replacing it, stranding the old
+qualifier mid-name: `HDFC Low Duration` → `HDFC **Low** Ultra Short to Short Term`,
+`Axis Treasury Advantage` → `Axis **Treasury** Ultra Short to Short Term`. Both are pinned by hand.
+Each has a near-twin that is a genuinely different fund, so **pin on `sub_category`, never on name
+similarity** — the targets are `Low Duration`, while HDFC/Axis "Ultra Short Term Fund" are
+`Ultra Short Duration`.
+
+**`NARRATIVE` is hand-copied from the deck's index pages (slides 2-4) and must be re-read every
+month** — carrying last month's forward silently drops funds. Sep-2026 moved two:
+`Carnelian Private Growth & Innovation Fund` appeared under a renamed heading
+("EQUITY AIFs- Unlisted Equities" → "Private Equity/ Venture Capital Fund"), and
+`Inquant Debt Plus Fund` moved to a brand-new "Long - Short AIF" heading the dashboard has no
+bucket for. Both are still recommended, so both stay in their existing categories —
+**anchor the bucket on MASTER's own taxonomy, not the deck heading.** Deck headings move; the
+dashboard's 33 categories do not.
+
 - **Membership comes from the deck; the dashboard's 33 categories do not change.** `GRID` maps a
   deck heading to an existing `sheet`/`category`. Deck buckets the dashboard has no Select bucket
   for (Overnight, Liquid, Floater, target-maturity FoF, plain index trackers, ETF, International,
@@ -1085,7 +1115,8 @@ reproduces the true browser state including all five sibling mutations. Expected
 ```
 MASTER baseline 7643  →  effective 7652
 EQUITY_ANALYTICS 1190 →  effective 1192      RISK_MATRIX 1088
-CENTRICITY_SELECT 178 (all 178 still present in MASTER)   PMS_AIF_TERMS 73
+CENTRICITY_SELECT 178 (all 178 still present in MASTER; 133 with rationale, 33 categories)
+PMS_AIF_TERMS 73
 EXTRA_SLIDES 6 keys / 10 images (3 dividers + 5 market + disclaimer + thankyou)
 PMS_PERFORMANCE.pms 692   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
 HYBRID_ANALYTICS 254      DEBT_ANALYTICS 508
@@ -1121,6 +1152,13 @@ Skip the `React is not defined` errors from the UI blocks — expected without a
 9. `Prism Hybrid Long-Short Fund` (new SIF, Aug-2026) has no AMC prefix — the monitor gives none.
 10. `360 ONE Balanced Hybrid Fund-Reg(G)` is in the analytics and fund-manager workbooks but in no
     Monitor, so it is not in `MASTER` at all. Upstream gap, pre-dates this cycle.
+13. **`Mosaic Multiyield Fund Series I` carries a Select badge the deck no longer gives it.** The
+    Sep-2026 deck lists **Series II**; MASTER has only Series I, so the badge sits on an instrument
+    that is no longer recommended. Adding Series II is a universe change — `add_reckoner_funds.js`
+    plus a desk call on whether Series I is retired or merely closed to new money.
+14. **`Motilal Oswal Gift City India Equity Fund – Inbound`** is the Sep-2026 deck's replacement for
+    `Motilal Oswal Alternative Investment (Inbound)` (dropped this cycle). It has no MASTER record,
+    so the GIFT CITY bucket is one fund short of what the deck recommends.
 11. **34 funds show risk stats their own source calls unreliable** (Sep-2026). The workbook's
     `Data Flags` tab is parsed for the benchmark name but its warnings reach no one: 29 funds
     flagged `split in NAV (3Y) — risk stats unreliable` and 5 flagged `low correlation to

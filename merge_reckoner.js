@@ -72,10 +72,16 @@ const NARRATIVE = {
     'Neo Yield Enhancer', 'Phillip Conservative Credit Portfolio', 'Sundaram F.I.R.S.T. Debt PMS'] },
   'DEBT AIF ': { cat: 'DEBT AIFs', kind: 'aif', names: [
     'Northern Arc Money Market Alpha Fund', 'Vivriti Short Term Debt Fund ', 'Mosaic Multiyield Fund Series I',
-    'UTI Structured Debt Fund IV', 'Neo Infra Income Opportunities Fund II', 'InCred Credit Opportunities Fund III '] },
+    'UTI Structured Debt Fund IV', 'Neo Infra Income Opportunities Fund II', 'InCred Credit Opportunities Fund III ',
+    // Sep-2026 moved this under a new "Long - Short AIF" index heading, which the dashboard has no
+    // Select bucket for. MASTER files it Debt / AIF / Debt AIF, so it stays in DEBT AIFs — deck
+    // headings move, the dashboard's categories do not.
+    'Inquant Debt Plus Fund'] },
+  // The deck renamed this heading to "Private Equity/ Venture Capital Fund" in Sep-2026; same
+  // bucket, same members plus Carnelian, whose MASTER class is AIF CAT II - Unlisted Equity.
   'EQUITY AIFs- Unlisted Equities': { cat: 'EQUITY AIFs- Unlisted Equities', kind: 'aif', names: [
     'InCred Growth Partners Fund II', '360 0ne Early-Stage Fund Series I ', 'Campus Fund III ',
-    'ValueQuest S.C.A.L.E. Fund II '] },
+    'ValueQuest S.C.A.L.E. Fund II ', 'Carnelian Private Growth & Innovation Fund'] },
   'Unlisted Equity ': { cat: 'UNLISTED EQUITIES', kind: 'unlisted', names: [
     'Orbis', 'Parag Parikh Financial Advisory Services', 'Goodluck Defence & Aerospace', 'ESDS Software Solution'] },
   'Gift City Funds': { cat: 'GIFT CITY FUNDS', kind: 'gift', names: [
@@ -90,8 +96,20 @@ const PIN = {
   'Motilal Oswal Founders Fund*':               'Motilal Oswal Founders Fund',
   'Alchemy Long Term Ventures Fund*':           'Alchemy Long Term Ventures Fund',
   'Vedartha India Opportunities Fund I':        'Vedartha India Opportunities Fund – Series 1',
+  // Both targets were themselves renamed by SEBI in Aug-2026 and are now the `prev_name` of the
+  // live record, so the prev_name tier in resolve() carries them. Left spelled as the deck writes
+  // them rather than re-pointed, so the pin still documents what the DECK says.
   'HDFC Multi-Asset Fund(G)':                   'HDFC Multi-Asset Allocation Fund(G)',
   'SBI Constant Maturity Fund-Reg(G)':          'SBI Constant Maturity 10 Year Gilt Fund-Reg(G)',
+  // Sep-2026: the deck applied the SEBI "Low Duration -> Ultra Short to Short Term" rename ON TOP
+  // of the old name instead of replacing it, leaving the old qualifier stranded in the middle
+  // ("HDFC Low Duration" -> "HDFC Low Ultra Short to Short Term"; "Axis Treasury Advantage" ->
+  // "Axis Treasury Ultra Short to Short Term"). No normalisation can bridge that, and each has a
+  // near-twin that is a DIFFERENT fund: the targets below are sub_category "Low Duration", while
+  // HDFC/Axis "Ultra Short Term Fund" are "Ultra Short Duration". Both appear under the deck's own
+  // LOW DURATION FUNDS heading.
+  'HDFC Low Ultra Short to Short Term Fund(G)':     'HDFC Ultra Short to Short Term Fund(G)',
+  'Axis Treasury Ultra Short to Short Term Fund(G)':'Axis Ultra Short to Short Term Fund-Reg(G)',
   // added to the universe 20-Aug-2026 by add_reckoner_funds.js; MASTER uses the AMC's own
   // one-word spelling, and the GIFT City record carries the (Inbound) suffix its peers use
   'Alf Accurate Budding Beasts PMS':             'AlfAccurate Budding Beasts PMS',
@@ -115,12 +133,35 @@ const byNorm = new Map();
 for (const r of MASTER) { const k = norm(r.name); if (!byNorm.has(k)) byNorm.set(k, []); byNorm.get(k).push(r.name); }
 const subOf = new Map(MASTER.map(r => [r.name, r.sub_category]));
 
+// The deck lags the SEBI renames: Sep-2026 still wrote "Kotak Multicap Fund-Reg(G)",
+// "ICICI Pru Banking & PSU Debt Fund(G)" and ten more under their pre-rename spellings. Those are
+// exactly the names rename_schemes.js stamped onto the record as `prev_name`, so the join is exact
+// — no fuzzy matching. Without this tier the deck name reads as an unknown fund, the existing
+// Select entry is dropped, and a house recommendation silently disappears from the pick list.
+// A LIVE name always wins over a prev_name, mirroring H.buildFundIndex's second pass.
+const byPrev = new Map(), byNormPrev = new Map();
+for (const r of MASTER) {
+  if (!r.prev_name) continue;
+  if (!byPrev.has(r.prev_name)) byPrev.set(r.prev_name, r.name);
+  const k = norm(r.prev_name);
+  if (!byNormPrev.has(k)) byNormPrev.set(k, []);
+  byNormPrev.get(k).push(r.name);
+}
+
 const unresolved = [];
+const viaPrev = [];
 function resolve(name) {
-  if (PIN[name] && exact.has(PIN[name])) return PIN[name];
+  if (PIN[name]) {
+    if (exact.has(PIN[name])) return PIN[name];
+    // A pin written before Aug-2026 can point at a name that has itself since been renamed.
+    if (byPrev.has(PIN[name])) { viaPrev.push(name + '  -> ' + byPrev.get(PIN[name]) + '  (pin target renamed)'); return byPrev.get(PIN[name]); }
+  }
   if (exact.has(name)) return name;
+  if (byPrev.has(name)) { viaPrev.push(name + '  -> ' + byPrev.get(name)); return byPrev.get(name); }
   const c = byNorm.get(norm(name)) || [];
   if (c.length === 1) return c[0];
+  const cp = byNormPrev.get(norm(name)) || [];
+  if (!c.length && cp.length === 1) { viaPrev.push(name + '  -> ' + cp[0] + '  (normalised)'); return cp[0]; }
   unresolved.push(name + (c.length ? '  (ambiguous x' + c.length + ')' : '  (no MASTER record)'));
   return null;
 }
@@ -205,7 +246,12 @@ const badKeys = Object.keys(out).filter(k => !exact.has(k));
 console.log('\nGATE every key exists in MASTER: ' + (badKeys.length ? '*** ' + badKeys.join(' | ') : 'PASS'));
 console.log('GATE rationale present: ' + Object.values(out).filter(v => v.rationale).length + '/' + Object.keys(out).length);
 const cats = {}; Object.values(out).forEach(v => { cats[v.category] = (cats[v.category] || 0) + 1; });
-console.log('GATE categories: ' + Object.keys(cats).length + ' (was 33)');
+console.log('GATE categories: ' + Object.keys(cats).length + ' (was ' + new Set(Object.values(S0).map(v => v.category)).size + ')');
+
+if (viaPrev.length) {
+  console.log('\n===== RESOLVED VIA prev_name (deck still on the pre-rename spelling) =====');
+  [...new Set(viaPrev)].sort().forEach(v => console.log('  ~ ' + v));
+}
 
 console.log('\n================ ADDED ================');
 added.sort().forEach(a => console.log('  + ' + a));
