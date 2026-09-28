@@ -21,8 +21,11 @@ const PINS = {
     'distinct from Fractal Capital - Wealth Builder, which is a different manager'],
   'TCG Transformative Growth Portfolio': ['TCG Transformative Growth Portfolio',
     'the file carries this name verbatim'],
-  'Emkay Golden Decade PMS': ["Emkay Investments - India''s Golden Decade of Growth",
-    'doubled apostrophe is in the source; the only Emkay Golden Decade strategy in the file'],
+  // The vendor dropped the doubled apostrophe it used to write ("India''s" -> "Indias") with the
+  // Aug-2026 file; merge_pms_performance.js's REPIN carries the same spelling. Still the only
+  // Emkay Golden Decade strategy in the file — the other seven Emkay schemes are unrelated mandates.
+  'Emkay Golden Decade PMS': ['Emkay Investments - Indias Golden Decade of Growth',
+    'the only Emkay Golden Decade strategy in the file'],
   'Motilal Oswal Founders Portfolio': ['Motilal Oswal-Founders',
     'the only Founders strategy among the 10 Motilal Oswal schemes in the file'],
 };

@@ -124,7 +124,7 @@ Baseline `MASTER` block 7,643. `EQUITY_ANALYTICS` 1,192 · `HYBRID_ANALYTICS` 25
 `DEBT_ANALYTICS` 508 · `DIRECT_PERF` 1,680 · `MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
 
 Effective `DATA_DATES`: performance / analytics / **sif** = `31st August 2026`,
-pms = `31st July 2026`, `riskMatrix` = `31 Aug 2026`.
+pms = `31st August 2026`, `riskMatrix` = `31 Aug 2026`.
 
 222 MF records carry a `prev_name` — 217 from the Aug-2026 SEBI rename, 5 from the duplicate
 fold of 17-Sep-2026 (see *Two spellings of one fund* under Traps).
@@ -927,8 +927,8 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | Direct-plan overlay | `Daily MF Monitor_Direct_<date>.xlsx` | with above | 31 Aug 2026 |
 | Equity/Hybrid/Debt Analytics | `<Class> Analytics_<Month>.xlsx` | monthly | 31 Aug 2026 |
 | PMS/AIF look-through | `PMS & AIF Analytics <Month Year>.xlsx` (Desktop root) | monthly | 31 Jul 2026 |
-| PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` | monthly | 31 Jul 2026 |
-| AIF performance + benchmarks | the Reckoner deck itself → `merge_aif_performance.js` | monthly | 31 Jul 2026 |
+| PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` *(Desktop root)* | monthly | 31 Aug 2026 |
+| AIF performance + benchmarks | the Reckoner deck itself → `merge_aif_performance.js` | monthly | 31 Aug 2026 |
 | Direct Equity | `Listed Direct Equity_<Month>.xlsx` (universe + returns) | monthly | 31 Aug 2026 |
 | Bonds | `Bond List_<date>.xlsx` → `merge_bond_list.js` | periodic | Invictus 6 Aug 2026; OneDigital older |
 | GIFT City / Offshore | `Gift City Master List.xlsx` | periodic | Jun 2026 (sibling) |
@@ -956,7 +956,7 @@ Two separate refreshes, both driven by files Rahul drops in the month folder. Ru
 Reckoner's own index is the tie-breaker for the alias pins.
 
 ```bash
-node merge_pms_performance.js "<PMS_Scheme_Performance_<Month Year>.xlsx>" --as-on "31st July 2026" --html index.html
+node merge_pms_performance.js "<PMS_Scheme_Performance_<Month Year>.xlsx>" --as-on "31st August 2026" --html index.html
 node pin_pms_alias.js --html index.html
 node merge_reckoner.js "<Monthly Investment Reckoner - <Month Year>.pptx>" --html index.html
 node verify_page.js .
@@ -989,6 +989,20 @@ verbatim — **this file is PMS-only and cannot update AIF**. AIF comes from the
   stripping commas — not `Number()`.
 - The m-cap columns and the `Top Sector` sheet were **entirely empty** in July, so `top_sector_pct`
   could not be derived. Check before assuming the runbook's shape still holds.
+
+**The deck is named for the month it SHIPS, not the month it reports.** `Monthly Investment
+Reckoner - September 2026.pptx` carries performance as on **31 Aug 2026** — both the AIF grid and
+the PMS – EQUITY benchmark grid print "Performance as on August 31st, 2026". Read the date off the
+slide before merging; do not infer it from the file name.
+
+**`pin_pms_alias.js` refuses to write ALL its pins if any one key is missing** (`fail` is sticky and
+gates the single `writeBlocks` at the end). Sep-2026 hit this: the vendor dropped the doubled
+apostrophe it used to write, `Emkay Investments - India''s Golden Decade of Growth` became
+`…- Indias Golden Decade of Growth`, and the stale pin silently blocked the other four
+(Negen, Karma, TCG, Motilal Oswal Founders) as well. The tell is
+`*** key not in PMS_PERFORMANCE.pms` in the dry run — never `--apply` past it. `merge_pms_performance.js`'s
+`REPIN` map and this `PINS` map both name the same scheme, so **when the vendor renames, both need
+the edit**; check they agree before assuming one is right.
 
 Four pins are still `null` because the file genuinely has no counterpart: Burman Capital,
 Phillip Conservative Credit, Sundaram F.I.R.S.T. Debt, Julius Baer Premier Focused.
@@ -1077,7 +1091,7 @@ PMS_PERFORMANCE.pms 692   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 o
 HYBRID_ANALYTICS 254      DEBT_ANALYTICS 508
 RISK_MATRIX 1088 keys / 958 with metrics / 429 with rolling / 1088 with benchmark / 0 with `c`
 DATA_DATES sif = "31st August 2026"   (NOT "—" — if it reads "—" the SIF sibling did not load)
-DATA_DATES riskMatrix = "31 Aug 2026"
+DATA_DATES riskMatrix = "31 Aug 2026"   DATA_DATES pms = "31st August 2026"
 0 duplicate names         file ends </body></html>
 ```
 
