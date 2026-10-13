@@ -510,8 +510,10 @@ September 2026 export: 1,768 KB raw → 1,308 KB at quality 82, 5 slides, all 20
   closing slides: every type-13 picture narrower than 400pt, and every placeholder of type 13.
   Otherwise `stampLogo` double-stamps. (The 5-slide set live before this had a stray "5" baked in.)
 - PowerPoint's `Slide.Export` fails on the long scratchpad path; export to a short temp dir.
-- The "OVERALL MARKET UPDATE" slide was carried over word for word from September, now titled
-  "– August 2026". Shipped as the deck had it; flagged to the desk.
+- The first copy (11:28) carried September's "OVERALL MARKET UPDATE" slide over word for word,
+  titled "– August 2026". The desk re-issued the deck at 17:14 with a rewritten "– September 2026"
+  outlook, which is what is live. Slides 1-5 were pixel-identical between the two copies. **A
+  re-issued deck keeps the same file name**, so check `LastWriteTime` and pixel-diff the renders.
 
 ---
 
