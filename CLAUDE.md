@@ -124,7 +124,7 @@ Baseline `MASTER` block 7,672. `EQUITY_ANALYTICS` 1,205 · `HYBRID_ANALYTICS` 26
 `DEBT_ANALYTICS` 511 · `DIRECT_PERF` 1,689 · `MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
 
 Effective `DATA_DATES`: performance / analytics / **sif** = `30th September 2026`,
-pms = `31st August 2026`, `riskMatrix` = `31 Aug 2026`.
+pms = `31st August 2026`, `riskMatrix` = `30 Sep 2026`.
 
 225 records carry a `prev_name` — 217 MF from the Aug-2026 SEBI rename, 5 MF from the duplicate
 fold of 17-Sep-2026 (see *Two spellings of one fund* under Traps), and 3 Direct Equity company
@@ -713,6 +713,13 @@ no warning**: 29 flagged `split in NAV (3Y) — risk stats unreliable`, 5 flagge
 11 are harmless, since Max Drawdown is not a displayed column. So **34 funds show risk stats the
 source itself calls unreliable.** See open item 11.
 
+**30-Sep-2026 file:** 167 flagged — 122 `<250 days` (render `—`), **40 NAV-split + 5 low-correlation
+= 45 funds showing unreliable stats**, and no Max-Drawdown-only flags any more. The Data Flags tab has
+a title row above its header (`Fund Name | Category | Benchmark Used | NAV Days in 3Y Window | Data
+Flag`), so read it by finding that row. Join tiers were unchanged from August (exact 1,027 /
+prev_name 32 / plan-base 29, 0 unmatched). The 19 Sep-2026 MF launches are not in the workbook;
+they are too young for 3Y stats anyway.
+
 ### Scheme names are not stable — rename BEFORE you bake
 
 **Aug-2026: SEBI's scheme-name standardisation renamed 217 live schemes at once.** The monitor's
@@ -855,6 +862,11 @@ the SIF data, so it owns the date, and an upload still wins because `parseSif` r
 
 - **As-on precedence: picker → file name → the workbook's own "As on" banner.** Leaving the picker
   blank is the normal case; `SIF Monitor_31st August 2026.xlsx` dates itself.
+- **Every return in the MF and SIF Monitors is in percent — always ÷100, never guess.** `0.90`
+  means 0.90%, not 90%. `parseSif` used to treat anything under 1 as already a decimal, so a
+  return between −1% and +1% landed 100× too large (iSIF Ex-Top 100: SI 0.90% shown as 90.00%,
+  3M 0.598% as 59.82%; 19 values across the Sep-2026 bake). Fixed 13-Oct-2026. The ±300% gate
+  in `merge_sif_monitor.js` cannot catch this, so spot-check small returns against the workbook.
 - A scheme in the monitor but not in MASTER is **appended**, filed from the workbook's own
   `Asset Type` column as `Equity SIF` / `Hybrid SIF`. Nothing is invented: no AMC prefix and no IRR
   band, since the workbook carries neither.
@@ -962,7 +974,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | Fund managers | `Fund Manager Data_<date>.xlsx` -> `merge_fund_managers.js` | monthly | 31 Aug 2026 |
 | Expense / exit load | `Expense Ratio_<Month>.xlsx` + `Exit Load_<Month>.xlsx` | monthly | Sep 2026 |
 | Expected IRR | Exit Load & Expected IRR file (**format changed** — verify columns each run) | monthly | — |
-| Portfolio Matrix | `Fund Risk Ratios & 3Y Rolling ....xlsx` -> `merge_risk_matrix.js` | monthly | 31 Aug 2026 (1,088 funds; 958 with metrics) |
+| Portfolio Matrix | `Fund Risk Ratios & 3Y Rolling ....xlsx` -> `merge_risk_matrix.js` | monthly | 30 Sep 2026 (1,088 funds; 966 with metrics; 433 with 3Y rolling) |
 | Market Update slides | `Monthly Outlook Pagers_<Month Year>.pptx` | monthly | October 2026 deck = Sep-2026 data (6 slides) |
 | Centricity Select | `Monthly Investment Reckoner - <Month Year>.pptx` *(Desktop root)* | monthly | Sep-2026 deck = as on 31 Aug 2026 |
 
@@ -1145,9 +1157,9 @@ PMS_AIF_TERMS 73
 EXTRA_SLIDES 6 keys / 11 images (3 dividers + 6 market + disclaimer + thankyou)
 PMS_PERFORMANCE.pms 692   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
 HYBRID_ANALYTICS 264      DEBT_ANALYTICS 511
-RISK_MATRIX 1088 keys / 958 with metrics / 429 with rolling / 1088 with benchmark / 0 with `c`
+RISK_MATRIX 1088 keys / 966 with metrics / 433 with rolling / 1088 with benchmark / 0 with `c`
 DATA_DATES sif = "30th September 2026"   (NOT "—" — if it reads "—" the SIF sibling did not load)
-DATA_DATES riskMatrix = "31 Aug 2026"   DATA_DATES pms = "31st August 2026"
+DATA_DATES riskMatrix = "30 Sep 2026"   DATA_DATES pms = "31st August 2026"
 0 duplicate names         file ends </body></html>
 ```
 
@@ -1184,9 +1196,9 @@ Skip the `React is not defined` errors from the UI blocks — expected without a
 14. **`Motilal Oswal Gift City India Equity Fund – Inbound`** is the Sep-2026 deck's replacement for
     `Motilal Oswal Alternative Investment (Inbound)` (dropped this cycle). It has no MASTER record,
     so the GIFT CITY bucket is one fund short of what the deck recommends.
-11. **34 funds show risk stats their own source calls unreliable** (Sep-2026). The workbook's
-    `Data Flags` tab is parsed for the benchmark name but its warnings reach no one: 29 funds
-    flagged `split in NAV (3Y) — risk stats unreliable` and 5 flagged `low correlation to
+11. **45 funds show risk stats their own source calls unreliable** (30-Sep-2026 file; was 34). The
+    workbook's `Data Flags` tab is parsed for the benchmark name but its warnings reach no one: 40
+    funds flagged `split in NAV (3Y) — risk stats unreliable` and 5 flagged `low correlation to
     benchmark (β<0.30)` render ordinary-looking numbers in a client-facing tab. Needs a UI
     marker (a flag on `RISK_MATRIX` records plus a footnote), which is a feature, not a refresh.
 12. **No Python on this machine**, so `build_risk_matrix.py` — the authoritative RISK_MATRIX
