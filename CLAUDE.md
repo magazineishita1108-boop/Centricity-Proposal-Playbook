@@ -631,25 +631,22 @@ feature, not a refresh.
 ## Deploying to GitHub
 
 Repo: `https://github.com/magazineishita1108-boop/Centricity-Proposal-Playbook` (branch `main`).
-The project folder has **no `.git`** — it is not currently a working copy; pushes have been made
-some other way.
+The project folder has **no `.git`** — it is not a working copy. How to push (13-Oct-2026): clone
+`main` to a temp dir, copy every *tracked* file over it from the project folder
+(`git ls-files | while read f; do cp -p "$P/$f" "$f"; done`), check `git diff --stat` shows only
+this cycle's files, then commit and push. Git for Windows' credential manager holds the login;
+there is no `gh` CLI. `git status` lists every file as modified (CRLF noise from `autocrlf`) —
+trust `git diff --stat`, not `status`.
 
 **⚠ The repo is PUBLIC.** README asks that the tool not be shared beyond the Products team, and
 `robots.txt` only stops search engines — it does nothing about GitHub. The whole fund universe,
 Centricity Select rationales, PMS/AIF terms and house IRR bands are world-readable. Raise this
 before pushing.
 
-**Before any push, two things must be fixed:**
-
-1. **`Centricity_SIF_Refresh.js` is missing from the repo.** `index.html` L4191 `<script src>`s it,
-   so the deployed site 404s and silently falls back to the 12 legacy SIF rows instead of the
-   current 28-scheme universe. It is not gitignored — it was just never committed.
-2. **`.gitignore` does not catch the backups.** `*.bak` matches only names *ending* in `.bak`, so
-   `index.html.bak_directeq_20260728` and the other ~48 dated snapshots are **not** ignored. A
-   naive `git add .` would push ~250 MB of backups. Add `*.bak_*` and `*.bak[0-9]` first.
-
-Also on the repo but harmless: `Centricity_Risk_Matrix.js` (157,454 bytes) — the build artifact,
-not loaded by anything, and it's the `.bak_regen` copy rather than the current 156,775-byte one.
+The two former pre-push blockers are resolved (verified 13-Oct-2026): `Centricity_SIF_Refresh.js`
+is tracked, so all six deploy files are on `main`, and `.gitignore` carries `*.bak_*` /
+`*.bak[0-9]*`, so the dated backups stay local. `*.xlsx`, `*.pptx` and `.claude/` are ignored too.
+`Centricity_Risk_Matrix.js` is still tracked; it is unused, so that is harmless.
 
 ---
 
