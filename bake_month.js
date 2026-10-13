@@ -25,12 +25,14 @@ const P = {
   db:   path.join(DIR, 'Analytics', fs.readdirSync(path.join(DIR, 'Analytics')).find(f => /^Debt Analytics_/i.test(f)) || ''),
   // Regular monitor = anything but the Direct one. The file name drifts month to month
   // ("Daily MF monitor_30th June 2026", "Daily MF Monitor as on 31st August 2026"), so match
-  // the stem and exclude "_Direct" rather than pinning a separator.
-  reg:  path.join(DIR, fs.readdirSync(DIR).find(f => /^Daily MF ?monitor\b/i.test(f) && !/_Direct/i.test(f)) || ''),
+  // the stem and exclude "_Direct" rather than pinning a separator. Not \b: "_" is a word
+  // character, so "monitor_30th" has no boundary after "monitor" (Sep-2026 silently missed it).
+  reg:  path.join(DIR, fs.readdirSync(DIR).find(f => /^Daily MF ?monitor(?![a-z])/i.test(f) && !/_Direct/i.test(f)) || ''),
   dir:  path.join(DIR, fs.readdirSync(DIR).find(f => /^Daily MF Monitor_Direct/i.test(f)) || ''),
 };
 for (const [k, v] of Object.entries(P)) {
-  if (!v || !fs.existsSync(v)) { console.error(`*** missing source for "${k}": ${v}`); process.exit(2); }
+  // An unmatched find() joins to the folder itself, which exists — so test for a FILE.
+  if (!v || !fs.existsSync(v) || !fs.statSync(v).isFile()) { console.error(`*** missing source for "${k}": ${v}`); process.exit(2); }
   console.log(`${k.padEnd(5)} <- ${path.basename(v)}`);
 }
 console.log('');

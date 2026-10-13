@@ -9,7 +9,7 @@ operating manual; the PRD has the full feature history and rationale. Where they
 live code wins — see *Verifying* below.
 
 Owner/admin: Rahul Yadav (rahul.yadav@centricity.co.in). Verified against the live files
-17-Sep-2026 (Aug-2026 data refresh).
+13-Oct-2026 (Sep-2026 data refresh).
 
 ---
 
@@ -114,20 +114,21 @@ Line numbers below are as of 28-Jul-2026 and **drift with every edit** — re-de
 `window.MASTER` is also assigned at L2629, L2829, L2949, L7593–94, L7629–30 — those are **runtime
 uploader / add-fund handlers**, not data blocks. Only L1031 is the baseline.
 
-### Effective in-browser universe (after all five siblings run): **7,652** (Aug-2026 refresh)
+### Effective in-browser universe (after all five siblings run): **7,682** (Sep-2026 refresh, 13-Oct-2026)
 
-Direct Equity 5,370 · Bonds 50 (Invictus 36 · OneDigital 14) · MLD 1 · Equity SIF 15 · Hybrid SIF 14 ·
-Mutual Fund 1,755 (536 of them Index Fund, folded in 21-Aug-2026) · ETF 255 · Mutual Funds 67 ·
+Direct Equity 5,380 · Bonds 50 (Invictus 36 · OneDigital 14) · MLD 1 · Equity SIF 16 · Hybrid SIF 14 ·
+Mutual Fund 1,770 (543 of them Index Fund, folded in 21-Aug-2026) · ETF 259 · Mutual Funds 67 ·
 GIFT City 54 · Offshore Funds 4 · AIF 28 · PMS 27 · Fixed Deposit 6 · Unlisted Equity 5 · REIT/InvIT 1.
 
-Baseline `MASTER` block 7,643. `EQUITY_ANALYTICS` 1,192 · `HYBRID_ANALYTICS` 254 ·
-`DEBT_ANALYTICS` 508 · `DIRECT_PERF` 1,680 · `MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
+Baseline `MASTER` block 7,672. `EQUITY_ANALYTICS` 1,205 · `HYBRID_ANALYTICS` 264 ·
+`DEBT_ANALYTICS` 511 · `DIRECT_PERF` 1,689 · `MF_BENCHMARK_PERF` 47 · `RISK_MATRIX` 1,088.
 
-Effective `DATA_DATES`: performance / analytics / **sif** = `31st August 2026`,
+Effective `DATA_DATES`: performance / analytics / **sif** = `30th September 2026`,
 pms = `31st August 2026`, `riskMatrix` = `31 Aug 2026`.
 
-222 MF records carry a `prev_name` — 217 from the Aug-2026 SEBI rename, 5 from the duplicate
-fold of 17-Sep-2026 (see *Two spellings of one fund* under Traps).
+225 records carry a `prev_name` — 217 MF from the Aug-2026 SEBI rename, 5 MF from the duplicate
+fold of 17-Sep-2026 (see *Two spellings of one fund* under Traps), and 3 Direct Equity company
+renames from Sep-2026 (see *Listed companies rename too* under Traps).
 
 **`Centricity_June_Refresh.js` used to stamp `DATA_DATES.analytics = "30th June 2026"` on every
 page load**, silently reverting any later analytics bake. Removed 13-Aug-2026. If an as-on date
@@ -391,6 +392,22 @@ Windows path.
 - `sebi_mcap` must be joined **by company name, not row position** (this bug shipped for ~8 months,
   fixed 28-Jul-2026). Regression gate: after any Direct Equity refresh, the top 10 stocks by market
   cap must all read "Large Cap".
+- **Listed companies rename too, and the Direct Equity file has no ISIN** (Sep-2026).
+  `merge_de_universe.js` matches by name only, so a renamed company arrives as a "new listing"
+  while its old record lingers with a stale mcap. Always set the tool's *new listings* against its
+  *in MASTER but not in this month's file* list. Sep-2026 renamed three in place (with `prev_name`)
+  on same sector + mcap within 3% + the old name contained in the new one:
+  `ICICI Prudential Life Insurance Company Ltd.` → `ICICI Life Insurance Ltd.`,
+  `Virat Industries Ltd.` → `Brahm Virat Industries Corporation Ltd.`,
+  `Shree Marutinandan Tubes Ltd.` → `Shree Marutinandan Industries Ltd.`. The other 10 new names
+  had no name evidence and went in as new listings. Same-sector pairs on mcap alone, such as
+  PVP Ventures → Evervie Health and Max Alert Systems → Max Earth Resources, were reported, not
+  guessed.
+- **`Expense Ratio_` / `Exit Load_` gained a ` >>CTB Output` banner** above the header (Sep-2026),
+  and the merge read row 1 as the header and silently joined nothing (0 updated, 0 unchanged).
+  `merge_expense_exitload.js` now finds the `Scheme Name` row and refuses to write on 0 joins.
+- **`Daily MF monitor_<date>`** (underscore) slipped past `bake_month.js`'s `\bmonitor\b`:
+  `_` is a word character. Its existence check then passed on the bare folder path. Both fixed.
 
 ---
 
@@ -484,6 +501,17 @@ The source deck was renamed from `Monthly Outlook Pagers- <Month Year>.pptx` to
 September 2026**. Take whichever 5-slide market deck is in the month folder; don't match the name.
 
 September 2026 export: 1,768 KB raw → 1,308 KB at quality 82, 5 slides, all 2001×1125.
+
+**October 2026 deck (`Monthly Outlook Pagers_Oct 2026.pptx`, Sep-2026 data) broke two assumptions:**
+- **6 slides, not 5** (a second Commodity slide). The export iterates `ES.market`, so any count
+  works; `update_market_slides.js` flags the count change as a gate to confirm, not a failure.
+- **Slides 1-5 shipped with a baked-in Centricity logo** (a ~123x27pt picture at top-right) and
+  slides 1-3 + 6 with a slide-number placeholder. Delete both before exporting, exactly as for the
+  closing slides: every type-13 picture narrower than 400pt, and every placeholder of type 13.
+  Otherwise `stampLogo` double-stamps. (The 5-slide set live before this had a stray "5" baked in.)
+- PowerPoint's `Slide.Export` fails on the long scratchpad path; export to a short temp dir.
+- The "OVERALL MARKET UPDATE" slide was carried over word for word from September, now titled
+  "– August 2026". Shipped as the deck had it; flagged to the desk.
 
 ---
 
@@ -923,22 +951,22 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 
 | Domain | Source file | Cadence | As-on now |
 |---|---|---|---|
-| MASTER performance | `Daily MF Monitor as on <date>.xlsx` (48 sheets) | ~15 days | 31 Aug 2026 |
-| Direct-plan overlay | `Daily MF Monitor_Direct_<date>.xlsx` | with above | 31 Aug 2026 |
-| Equity/Hybrid/Debt Analytics | `<Class> Analytics_<Month>.xlsx` | monthly | 31 Aug 2026 |
+| MASTER performance | `Daily MF monitor_<date>.xlsx` (48 sheets) | ~15 days | 30 Sep 2026 |
+| Direct-plan overlay | `Daily MF Monitor_Direct_<date>.xlsx` | with above | 30 Sep 2026 |
+| Equity/Hybrid/Debt Analytics | `<Class> Analytics_<Month>.xlsx` | monthly | 30 Sep 2026 (SIF look-through still 31 Aug — Sep workbooks carry no SIFs) |
 | PMS/AIF look-through | `PMS & AIF Analytics <Month Year>.xlsx` (Desktop root) | monthly | 31 Jul 2026 |
 | PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` *(Desktop root)* | monthly | 31 Aug 2026 |
 | AIF performance + benchmarks | the Reckoner deck itself → `merge_aif_performance.js` | monthly | 31 Aug 2026 |
-| Direct Equity | `Listed Direct Equity_<Month>.xlsx` (universe + returns) | monthly | 31 Aug 2026 |
+| Direct Equity | `Listed Direct Equity_<Month>.xlsx` (universe + returns) | monthly | universe 30 Sep 2026; returns 31 Aug 2026 |
 | Bonds | `Bond List_<date>.xlsx` → `merge_bond_list.js` | periodic | Invictus 6 Aug 2026; OneDigital older |
 | GIFT City / Offshore | `Gift City Master List.xlsx` | periodic | Jun 2026 (sibling) |
 | SIF universe | `SIF Master List_<Month Year>.xlsx` | monthly | Jul 2026 (29 schemes incl. Prism, added Aug) |
-| SIF performance | `SIF Monitor_<date>.xlsx` -> `merge_sif_monitor.js` | monthly | 31 Aug 2026 |
+| SIF performance | `SIF Monitor_<date>.xlsx` -> `merge_sif_monitor.js` | monthly | 30 Sep 2026 (30 schemes) |
 | Fund managers | `Fund Manager Data_<date>.xlsx` -> `merge_fund_managers.js` | monthly | 31 Aug 2026 |
-| Expense / exit load | `Expense Ratio_<Month>.xlsx` + `Exit Load_<Month>.xlsx` | monthly | Aug 2026 |
+| Expense / exit load | `Expense Ratio_<Month>.xlsx` + `Exit Load_<Month>.xlsx` | monthly | Sep 2026 |
 | Expected IRR | Exit Load & Expected IRR file (**format changed** — verify columns each run) | monthly | — |
 | Portfolio Matrix | `Fund Risk Ratios & 3Y Rolling ....xlsx` -> `merge_risk_matrix.js` | monthly | 31 Aug 2026 (1,088 funds; 958 with metrics) |
-| Market Update slides | `Monthly Outlook Pagers- <Month Year>.pptx` *(renamed back)* | monthly | September 2026 (5 slides) |
+| Market Update slides | `Monthly Outlook Pagers_<Month Year>.pptx` | monthly | October 2026 deck = Sep-2026 data (6 slides) |
 | Centricity Select | `Monthly Investment Reckoner - <Month Year>.pptx` *(Desktop root)* | monthly | Sep-2026 deck = as on 31 Aug 2026 |
 
 **Procedure for any refresh:**
@@ -1113,15 +1141,15 @@ the page's scripts in document order in a Node `vm` sandbox with a `window`/`doc
 reproduces the true browser state including all five sibling mutations. Expected results:
 
 ```
-MASTER baseline 7643  →  effective 7652
-EQUITY_ANALYTICS 1190 →  effective 1192      RISK_MATRIX 1088
+MASTER baseline 7672  →  effective 7682
+EQUITY_ANALYTICS 1203 →  effective 1205      RISK_MATRIX 1088
 CENTRICITY_SELECT 178 (all 178 still present in MASTER; 133 with rationale, 33 categories)
 PMS_AIF_TERMS 73
-EXTRA_SLIDES 6 keys / 10 images (3 dividers + 5 market + disclaimer + thankyou)
+EXTRA_SLIDES 6 keys / 11 images (3 dividers + 6 market + disclaimer + thankyou)
 PMS_PERFORMANCE.pms 692   PMS_PERF_ALIAS 27 (4 null)   MASTER PMS with perf 23 of 27
-HYBRID_ANALYTICS 254      DEBT_ANALYTICS 508
+HYBRID_ANALYTICS 264      DEBT_ANALYTICS 511
 RISK_MATRIX 1088 keys / 958 with metrics / 429 with rolling / 1088 with benchmark / 0 with `c`
-DATA_DATES sif = "31st August 2026"   (NOT "—" — if it reads "—" the SIF sibling did not load)
+DATA_DATES sif = "30th September 2026"   (NOT "—" — if it reads "—" the SIF sibling did not load)
 DATA_DATES riskMatrix = "31 Aug 2026"   DATA_DATES pms = "31st August 2026"
 0 duplicate names         file ends </body></html>
 ```

@@ -31,6 +31,20 @@ const num = v => { if (v == null || v === '') return null; const n = typeof v ==
 const MISSING = /^(\.|-|--|na|n\.a\.?|n\/a|no option|not applicable|nil\.?\s*$|)$/i;
 const isMissing = s => { const t = tidy(s); return t === '' || /^(\.|-|--|na|n\.a\.?|n\/a|no option|not applicable)$/i.test(t); };
 
+// Sep-2026 started shipping both workbooks with a " >>CTB Output" banner above the header, so
+// the header row is found by content, not assumed to be row 1. Reading row 1 as the header made
+// every 'Scheme Name' lookup undefined and the merge a silent no-op.
+function readRows(file) {
+  const wb = XLSX.readFile(file);
+  const ws = wb.Sheets['Sheet1'] || wb.Sheets[wb.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  const hdr = grid.findIndex(r => (r || []).some(c => tidy(c) === 'Scheme Name'));
+  if (hdr < 0) { console.error(`*** no "Scheme Name" header row in ${path.basename(file)}`); process.exit(1); }
+  return XLSX.utils.sheet_to_json(ws, { defval: null, range: hdr })
+    .map(r => { const o = {}; for (const k of Object.keys(r)) o[tidy(k)] = r[k]; return o; });
+}
+let joined = 0;
+
 const html = fs.readFileSync(HTML, 'utf8');
 function block(prefix) {
   const i = html.indexOf(prefix);
@@ -48,12 +62,13 @@ let expReg = 0, expDir = 0, expUnchanged = 0, xl = 0, xlSkipped = 0;
 const expMissRows = [], badExp = [];
 
 if (EXP) {
-  const rows = XLSX.utils.sheet_to_json(XLSX.readFile(EXP).Sheets['Sheet1'], { defval: null });
+  const rows = readRows(EXP);
   console.log(`\nexpense rows: ${rows.length}`);
   for (const r of rows) {
     const nm = tidy(r['Scheme Name']);
     const rec = byName.get(nm);
     if (!rec) continue;
+    joined++;
     const total = num(r['Ratio']);
     if (total != null) {
       // SEBI caps a plain equity MF around 2.25%, but SIF / long-short schemes in this universe
@@ -80,13 +95,14 @@ if (EXP) {
 }
 
 if (EXIT) {
-  const rows = XLSX.utils.sheet_to_json(XLSX.readFile(EXIT).Sheets['Sheet1'], { defval: null });
+  const rows = readRows(EXIT);
   console.log(`\nexit-load rows: ${rows.length}`);
   const RCOL = Object.keys(rows[0]).find(k => /remark/i.test(k)) || 'Remark';
   for (const r of rows) {
     const nm = tidy(r['Scheme Name']);
     const rec = byName.get(nm);
     if (!rec) continue;
+    joined++;
     const raw = r[RCOL];
     if (isMissing(raw)) { xlSkipped++; continue; }   // placeholder, not data
     const v = tidy(raw);
@@ -110,6 +126,8 @@ const dupes = names.filter((n, i) => names.indexOf(n) !== i);
 console.log(`GATE duplicate names: ${dupes.length ? '*** FAIL' : 'PASS (0)'}`);
 if (dupes.length) fail = true;
 console.log(`GATE MASTER count unchanged: ${master.length === mB.value.length ? 'PASS' : '*** FAIL'}`);
+console.log(`GATE source rows joined to MASTER: ${joined ? 'PASS (' + joined + ')' : '*** FAIL (0) — header or naming changed'}`);
+if (!joined) fail = true;
 const sample = master.find(r => r.name === 'Aditya Birla SL Large Cap Fund-Reg(G)');
 console.log(`SAMPLE ${sample.name}: expense=${sample.expense} exit_load="${sample.exit_load}" | Direct expense=${(direct[sample.name] || {}).expense}`);
 
