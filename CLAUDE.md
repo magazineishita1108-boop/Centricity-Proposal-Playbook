@@ -408,6 +408,14 @@ Windows path.
   `merge_expense_exitload.js` now finds the `Scheme Name` row and refuses to write on 0 joins.
 - **`Daily MF monitor_<date>`** (underscore) slipped past `bake_month.js`'s `\bmonitor\b`:
   `_` is a word character. Its existence check then passed on the bare folder path. Both fixed.
+- **The Direct Equity returns file (`Listed Direct Equity_30th Sep 2026.xlsx`) arrived twice.**
+  Both copies have three blank rows above the header, and `merge_direct_equity_returns.js` now finds
+  the `Company Name` row. The 13:52 copy dated its 5Y column `30Oct2026`, a future date, and it was
+  **completely empty**. The join *deletes* any return the file lacks, so applying it would have
+  wiped 5Y from all 3,517 stocks. The 14:05 re-issue fixed it. The script now refuses to run when
+  any return column is wholly empty. Coverage on 30 Sep: 4,615 of 5,380 matched (ISIN 4,263 /
+  name 352). Stocks with 1Y/3Y went 4,379 → 4,448 and with 5Y 3,517 → 3,542. Note the
+  script's *"Direct Equity with returns"* gate counts `r1y || r3y` only, so compare like with like.
 
 ---
 
@@ -968,7 +976,7 @@ if the two differ, the scale or the merge is wrong. Only returns, TER and AUM sh
 | PMS/AIF look-through | `PMS & AIF Analytics <Month Year>.xlsx` (Desktop root) | monthly | 31 Jul 2026 |
 | PMS scheme performance | `PMS_Scheme_Performance_<Month Year>.xlsx` *(Desktop root)* | monthly | 31 Aug 2026 |
 | AIF performance + benchmarks | the Reckoner deck itself → `merge_aif_performance.js` | monthly | 31 Aug 2026 |
-| Direct Equity | `Listed Direct Equity_<Month>.xlsx` (universe + returns) | monthly | universe 30 Sep 2026; returns 31 Aug 2026 |
+| Direct Equity | `Listed Direct Equity_<Month>.xlsx` (universe + returns) | monthly | universe + returns 30 Sep 2026 |
 | Bonds | `Bond List_<date>.xlsx` → `merge_bond_list.js` | periodic | Invictus 6 Aug 2026; OneDigital older |
 | GIFT City / Offshore | `Gift City Master List.xlsx` | periodic | Jun 2026 (sibling) |
 | SIF universe | `SIF Master List_<Month Year>.xlsx` | monthly | Jul 2026 (29 schemes incl. Prism, added Aug) |

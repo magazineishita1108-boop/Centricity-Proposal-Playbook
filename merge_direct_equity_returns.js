@@ -57,7 +57,12 @@ const normName = s => clean(s).toLowerCase()
 // --- 1. read the returns workbook ---
 const wb = XLSX.readFile(SRC, { cellDates: false });
 const ws = wb.Sheets[wb.SheetNames[0]];
-const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+// The 30-Sep-2026 file put three blank rows above the header, so find the header by content
+// rather than assuming row 1 (which made every column "__EMPTY" and aborted the run).
+const HDR = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+  .findIndex(r => r.some(c => /company\s*name/i.test(clean(c))));
+if (HDR < 0) { console.error('*** no "Company Name" header row found'); process.exit(1); }
+const rows = XLSX.utils.sheet_to_json(ws, { defval: null, range: HDR });
 console.log(`source rows: ${rows.length}`);
 console.log(`source columns: ${Object.keys(rows[0]).slice(0, 12).join(' | ')}`);
 
@@ -110,6 +115,14 @@ for (const r of rows) {
   if (nn && !byName.has(nn)) byName.set(nn, rec);
 }
 console.log(`rows with >=1 return: ${srcWithAny}  (values rejected as out-of-range: ${outOfRange})`);
+// A wholly empty return column means the vendor ran that tenor wrong (the first 30-Sep-2026 file
+// dated its 5Y column 30Oct2026, a future date, and carried no 5Y at all). The join below deletes
+// any field the file lacks, so writing it would wipe that return from every stock. Refuse instead.
+const emptyCols = COLMAP.filter(([, col]) => !rows.some(r => num(r[col]) != null)).map(([f, col]) => `${f} (${col})`);
+if (emptyCols.length) {
+  console.error(`\n*** return column(s) completely empty: ${emptyCols.join(', ')} — re-request the file; refusing to run.`);
+  process.exit(1);
+}
 console.log(`unique ISINs: ${byIsin.size} | unique names: ${byName.size}`);
 
 // --- 2. locate and parse the MASTER block ---
