@@ -1703,8 +1703,8 @@ window.linkIdcwToGrowth();
           const r = CB(h.rating);
           issuers[iss] = issuers[iss] || {pct: 0, rating: r};
           issuers[iss].pct += h.pct/100 * A;
-          rating[r] += h.pct/100 * A;
         }
+        for (const [b, v] of Object.entries(window.H.fundRatingBuckets(dbA, false))) rating[b] += v/100 * A;
         debt_exposure += A; // pure debt 100% of A
       } else if (hyA) {
         for (const [sec, v] of Object.entries(hyA.db_sector)) sector[sec] = (sector[sec]||0) + v/100 * A;
@@ -1713,8 +1713,8 @@ window.linkIdcwToGrowth();
           const r = CB(h.rating);
           issuers[iss] = issuers[iss] || {pct: 0, rating: r};
           issuers[iss].pct += h.pct/100 * A;
-          rating[r] += h.pct/100 * A;
         }
+        for (const [b, v] of Object.entries(window.H.fundRatingBuckets(hyA, true))) rating[b] += v/100 * A;
         debt_exposure += hyA.db_total/100 * A;
       } else if (s.fund.product_class === "Bonds") {
         const iss = s.fund.bond_issuer || parseIssuer(s.fund.name);
@@ -1742,11 +1742,15 @@ window.linkIdcwToGrowth();
     if (debt_exposure > 0) {
       for (const k of Object.keys(sector)) sector[k] = sector[k] / debt_exposure * 100;
       for (const k of Object.keys(issuers)) issuers[k].pct = issuers[k].pct / debt_exposure * 100;
-      for (const k of Object.keys(rating)) rating[k] = rating[k] / debt_exposure * 100;
     }
-    // Strip zero ratings
-    const ratingClean = {};
-    for (const [k, v] of Object.entries(rating)) if (v > 0.001) ratingClean[k] = v;
+    // Fold any stray legacy keys ("AAA & Equiv", "SOV (Govt)") onto the fixed buckets, then
+    // rescale so the distribution always sums to 100.
+    const ratingB = {};
+    for (const [k, v] of Object.entries(rating)) {
+      const b = window.H.CREDIT_BUCKETS.indexOf(k) >= 0 ? k : CB(k);
+      ratingB[b] = (ratingB[b] || 0) + (v || 0);
+    }
+    const ratingClean = window.H.normaliseRatings(ratingB);
     return {
       sectors: Object.entries(sector).sort((a,b) => b[1]-a[1]),
       issuers: Object.entries(issuers).sort((a,b) => b[1].pct - a[1].pct),
@@ -2152,10 +2156,51 @@ window.linkIdcwToGrowth();
     if (b === 'AAA' || b === 'A1+' || b === 'AAA & EQUIV') return 'AAA/A1+';
     if (b === 'AA+') return 'AA+';
     if (/^(AA|A|BBB|BB|B|C|D)\b/.test(b) || /^(AA|A|BBB|BB|B|C|D)[-+]?$/.test(b)) return 'AA & Below';
+    // Short-term grades below A1+ (A1, A2+, A2, A3, A4…) — e.g. "A2+(SO)" in the debt workbook.
+    if (/^A[1-4]\+?$/.test(b)) return 'AA & Below';
     if (b === 'UNRATED' || b === 'NOT RATED' || b === 'NR') return 'Unrated';
     // Equity, Derivatives, REITs & InvITs — and any new non-rating string the source starts
     // sending. Falling back to Others rather than Unrated keeps Unrated meaning what it says.
     return 'Others';
+  };
+  // One fund's credit profile as {bucket: % of the fund's NAV}. Reads the FULL per-fund rating
+  // map the analytics parser keeps (`rating` on a debt record, `db_rating` on a hybrid one) —
+  // it covers every holding. The `holdings` list is only the top 20, so bucketing that instead
+  // left a diversified fund's chart summing to ~43%. Falls back to the holdings only for a
+  // record that predates the rating map.
+  H.fundRatingBuckets = function(rec, hybrid) {
+    const out = {};
+    if (!rec) return out;
+    const full = hybrid ? rec.db_rating : rec.rating;
+    if (full && Object.keys(full).length) {
+      for (const [raw, v] of Object.entries(full)) {
+        const b = H.creditBucket(raw);
+        out[b] = (out[b] || 0) + (Number(v) || 0);
+      }
+    } else {
+      for (const h of ((hybrid ? rec.db_holdings : rec.holdings) || [])) {
+        const b = H.creditBucket(h.rating);
+        out[b] = (out[b] || 0) + (Number(h.pct) || 0);
+      }
+    }
+    return out;
+  };
+  // Rescale a bucket map so it sums to exactly 100, in CREDIT_BUCKETS order, zero buckets dropped.
+  H.normaliseRatings = function(rating) {
+    let tot = 0;
+    for (const v of Object.values(rating)) if (v > 0) tot += v;
+    const out = {};
+    if (tot <= 0) return out;
+    // Drop slivers first, then rescale what is left, so the result is exactly 100.
+    let kept = 0;
+    for (const b of H.CREDIT_BUCKETS) if (rating[b] / tot * 100 > 0.001) kept += rating[b];
+    for (const b of H.CREDIT_BUCKETS) if (rating[b] / tot * 100 > 0.001) out[b] = rating[b] / kept * 100;
+    return out;
+  };
+  // Fixed colour per bucket, so a slice keeps its colour whichever buckets are present.
+  H.CREDIT_COLORS = {
+    'SOV': '#1F2A38', 'AAA/A1+': '#BD9568', 'AA+': '#DBC8B2', 'AA & Below': '#8C7B5C',
+    'Cash & Equivalents': '#5C3E17', 'Unrated': '#BFBFBF', 'Others': '#931621'
   };
 
   // Debt instruments that ARE their own holding — the debt look-through reads bond_issuer and
@@ -2354,8 +2399,9 @@ window.linkIdcwToGrowth();
           const r = H.creditBucket(h.rating);
           issuers[iss] = issuers[iss] || {pct:0, rating: r};
           issuers[iss].pct += h.pct/100 * A;
-          rating[r] += h.pct/100 * A;
         }
+        // Ratings from the full per-fund map, not the top-20 holdings list above.
+        for (const [b, v] of Object.entries(H.fundRatingBuckets(dbA, false))) rating[b] += v/100 * A;
         debt_exposure += A;
       } else if (hyA && isHybridMF) {
         for (const [sec, v] of Object.entries(hyA.db_sector)) sector[sec] = (sector[sec]||0) + v/100 * A;
@@ -2364,8 +2410,8 @@ window.linkIdcwToGrowth();
           const r = H.creditBucket(h.rating);
           issuers[iss] = issuers[iss] || {pct:0, rating: r};
           issuers[iss].pct += h.pct/100 * A;
-          rating[r] += h.pct/100 * A;
         }
+        for (const [b, v] of Object.entries(H.fundRatingBuckets(hyA, true))) rating[b] += v/100 * A;
         debt_exposure += hyA.db_total/100 * A;
       } else if (isBond) {
         const isMld = f.product_class === 'MLD';
@@ -2390,14 +2436,12 @@ window.linkIdcwToGrowth();
     if (debt_exposure > 0) {
       for (const k of Object.keys(sector)) sector[k] = sector[k] / debt_exposure * 100;
       for (const k of Object.keys(issuers)) issuers[k].pct = issuers[k].pct / debt_exposure * 100;
-      for (const k of Object.keys(rating)) rating[k] = rating[k] / debt_exposure * 100;
     }
-    const ratingClean = {};
-    for (const [k, v] of Object.entries(rating)) if (v > 0.001) ratingClean[k] = v;
     return {
       sectors: Object.entries(sector).sort((a,b)=>b[1]-a[1]),
       issuers: Object.entries(issuers).sort((a,b)=>b[1].pct-a[1].pct),
-      rating: ratingClean,
+      // Always sums to 100: shares of the rated debt book, in CREDIT_BUCKETS order.
+      rating: H.normaliseRatings(rating),
       exposure_cr: debt_exposure,
       skipped: db_skipped
     };
@@ -4664,7 +4708,7 @@ window.mfBenchmarkPerfFor = function(sub) {
         values: ratingKeys.map(k=>parseFloat(db.rating[k].toFixed(2)))
       }], {
         x:0.52, y:4.45, w:5.76, h:2.5,
-        chartColors:["1F2A38", COL.gold, COL.tan, "8C7B5C", "5C3E17", "BFBFBF", COL.red].slice(0, ratingKeys.length),
+        chartColors: ratingKeys.map(k => (H.CREDIT_COLORS[k] || "#BFBFBF").slice(1)),
         showLegend:true, legendPos:"r",
         showValue:true, dataLabelFontSize:9, dataLabelFontFace:"Cambria",
         dataLabelFormatCode:'0.00"%"',
@@ -7813,12 +7857,12 @@ function DebtTab({
     }]
   };
   const ratingLabels = Object.keys(db.rating);
-  const ratingColors = ["#1F2A38", GOLD, TAN, "#8C7B5C", "#5C3E17", "#BFBFBF", "#931621"];
   const ratingData = {
-    labels: ratingLabels,
+    // The % rides on the legend label too: slivers like Unrated 0.4% are too thin for a slice label.
+    labels: ratingLabels.map(k => k + ' ' + db.rating[k].toFixed(2) + '%'),
     datasets: [{
       data: ratingLabels.map(k => db.rating[k]),
-      backgroundColor: ratingColors.slice(0, ratingLabels.length)
+      backgroundColor: ratingLabels.map(k => H.CREDIT_COLORS[k] || "#BFBFBF")
     }]
   };
   const top20Iss = db.issuers.slice(0, 20);
@@ -7866,7 +7910,7 @@ function DebtTab({
         },
         tooltip: {
           callbacks: {
-            label: c => c.label + ': ' + c.parsed.toFixed(2) + '%'
+            label: c => c.label
           }
         }
       },

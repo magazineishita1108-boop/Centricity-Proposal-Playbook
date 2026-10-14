@@ -237,12 +237,16 @@ Others, not Unrated, so `Unrated` keeps meaning what it says. A *blank* rating s
 Both `aggDebtScoped` and the legacy `aggDebt` call the same helper. `aggDebt` sits in the pre-`H`
 closure so it reaches it via `window.H`; keep them in step rather than re-inlining the mapping.
 
-**The rating chart does not sum to 100% for broad funds** — a pre-existing limit, not a bucketing
-bug. The analytics store keeps only each fund's **top 20 holdings** (264 of 495 debt funds have
-exactly 20), so a diversified corporate bond fund's twenty largest positions are ~43% of its
-portfolio and the distribution totals 43%. Concentrated funds are complete; the store's median
-holdings sum is 100%. Fixing it means either normalising the buckets to the covered portion or
-carrying more holdings per fund at bake time — a decision that changes a client-facing number.
+**The rating chart reads the FULL rating map, never the top-20 holdings** (fixed 14-Oct-2026).
+The store keeps only each fund's top 20 `holdings`, so bucketing those left a diversified fund's
+chart at ~43%. But `parseAnalytics` also keeps a per-fund `rating` (debt) / `db_rating` (hybrid)
+map over **every** holding (sums to 100 / to `db_total`). `H.fundRatingBuckets` reads that map
+(falls back to holdings only for a record without one), and `H.normaliseRatings` rescales the
+result so the distribution is exactly 100% in `CREDIT_BUCKETS` order. Colours are fixed per
+bucket (`H.CREDIT_COLORS`) for the screen chart and the PPT. The on-screen legend carries each
+bucket's %, since slivers are too thin for a slice label. Verified: all 771 in-scope debt/hybrid
+funds sum to 100. `A2+(SO)`-style short-term grades now land in AA & Below, not Others. The
+Top 20 Issuers table is still from the top-20 holdings, which is correct for that table.
 
 **Holdings overlap is symmetric — compute it from two weight maps, never rows-vs-map**
 (08-Sep-2026). `computeOverlap` walked fund A's raw holding rows against an aggregated map of B,
